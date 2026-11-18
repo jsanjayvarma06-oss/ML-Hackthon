@@ -132,7 +132,7 @@ def comparison():
             "oof_route_continuity": "Route continuity", "fit_seconds_mean": "Train s / fold",
             "infer_ms_per_1000_rows": "Inference ms / 1k rows"}),
         "tuning": _csv_rows(res / "models" / "tuned_vs_untuned.csv", {
-            "model": "Model", "cv_top1_mean": "CV Top-1", "cv_f1_macro_mean": "CV macro F1",
+            "variant": "Variant", "model": "Model", "cv_top1_mean": "CV Top-1", "cv_f1_macro_mean": "CV macro F1",
             "cv_log_loss_mean": "CV log loss", "fit_seconds_mean": "Train s / fold",
             "infer_ms_per_1000_rows": "Inference ms / 1k rows"}),
         "decoder": _csv_rows(res / "pipeline" / "hmm_comparison.csv", {
