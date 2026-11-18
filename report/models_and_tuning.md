@@ -3,7 +3,7 @@
 Every number below is copied from a file in `results/models/`; the command that produced each file is in `results/models/EXPERIMENTS.md`. All numbers are train-only: GroupKFold(5) by `trip_id` (80 trips, 1,189,495 labelled candidate rows, `config.SEED` = 42). `student_test` is scored once at the end (`train_models.py --final`) and was never used for any choice.
 
 ## 1. The task each model solves
-For one (GPS point, candidate road arc) row of 12 features (distance, heading difference, arc length, speed, rank among candidates, ...), output the probability that this candidate is the arc the car was really on. For each point, the candidate with the highest probability is the Top-1 prediction. The HMM then uses these probabilities as emission scores.
+For one (GPS point, candidate road arc) row of 13 features (distance, heading difference, arc length, speed, rank among candidates, ...), output the probability that this candidate is the arc the car was really on. For each point, the candidate with the highest probability is the Top-1 prediction. The HMM then uses these probabilities as emission scores.
 
 ## 2. Comparison of the five models (untuned defaults)
 Source: `model_comparison.csv`, `cv_folds.csv`; plots `plots/cv_top1.png`, `cv_f1_macro.png`, `cv_log_loss.png`.
@@ -42,7 +42,7 @@ Source: `optuna_trials.csv`, `best_params.json`, `tuned_vs_untuned.csv`, `plots/
 5. **Best parameters:** n_estimators 450, learning_rate 0.0326, num_leaves 50, min_child_samples 121, subsample 0.592, colsample_bytree 0.572, reg_lambda 0.197.
 6. **Tuned vs untuned** (same 5 folds): Top-1 0.8505 -> 0.8510, macro F1 0.9105 -> 0.9111, log loss 0.1121 -> 0.1116, train Top-1 0.8788 -> 0.8762, route continuity 0.9287 -> 0.9282.
 
-**Interpretation, stated plainly:** tuning improved Top-1 by only +0.0005, far inside the fold spread (0.055). We conclude the default LightGBM was already near the plateau for these 12 features; most trials landed at about 0.849. The benefit is a slightly smaller train/validation gap, not accuracy. Larger gains must come from features or the HMM, not from hyperparameters. Caveat: tuning and the comparison use the same 80 train trips, so the tuned figure is mildly optimistic; no nested CV was run.
+**Interpretation, stated plainly:** tuning improved Top-1 by only +0.0005, far inside the fold spread (0.055). We conclude the default LightGBM was already near the plateau for these 13 features; most trials landed at about 0.849. The benefit is a slightly smaller train/validation gap, not accuracy. Larger gains must come from features or the HMM, not from hyperparameters. Caveat: tuning and the comparison use the same 80 train trips, so the tuned figure is mildly optimistic; no nested CV was run.
 
 ## 6. Exported model
 `python scripts/export_model.py` refits the tuned LightGBM on all 80 train trips and writes `artifacts/model.joblib` (1.1 MB; fields: model, feature_columns, name, params, trained_on, hmm_params), after checking that reloading gives the same probabilities. `hmm_params` is None until Sanjay's `results/pipeline/hmm_params.json` exists; re-run the export then.

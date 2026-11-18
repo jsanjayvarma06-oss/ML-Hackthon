@@ -184,12 +184,21 @@ def plot_history(name, hist, out):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(6, 3.6))
-    for k, v in hist.items():
-        ax.plot(np.arange(1, len(v) + 1), v, label=k)
+    losses = {k: v for k, v in hist.items() if k != "valid_score"}
+    for k, v in losses.items():
+        ax.plot(np.arange(1, len(v) + 1), v, label=f"{k} log loss")
     ax.set_xlabel("iteration / epoch")
-    ax.set_ylabel("log loss" if "valid_score" not in hist else "loss / score")
+    ax.set_ylabel("log loss")
+    if "valid_score" in hist:
+        # MLP early stopping reports accuracy on its 10% hold-out, not a loss: own axis
+        ax2 = ax.twinx()
+        v = hist["valid_score"]
+        ax2.plot(np.arange(1, len(v) + 1), v, color="tab:green", linestyle="--",
+                 label="hold-out accuracy (right axis)")
+        ax2.set_ylabel("accuracy")
+        ax2.legend(loc="center right")
     ax.set_title(f"{name}: training history (CV fold 0)")
-    ax.legend()
+    ax.legend(loc="upper right")
     fig.tight_layout()
     fig.savefig(out / f"loss_curve_{name}.png", dpi=150)
     plt.close(fig)
