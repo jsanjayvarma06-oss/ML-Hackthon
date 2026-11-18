@@ -61,3 +61,8 @@ All development runs use train only (GroupKFold(5) by trip_id, SEED=42). student
 - Outputs: `final_student_test.csv`, `plots/confusion_<model>.png`, `plots/student_test_top1_f1.png`, `plots/student_test_log_loss.png`
 - Headline Top-1 / macro F1 / log loss: LightGBM 0.8634 / 0.9167 / 0.1020; LightGBM tuned 0.8630 / 0.9164 / 0.1023; RF 0.8596 / 0.9157 / 0.1065; MLP 0.8558 / 0.9129 / 0.1079; LogReg 0.8466 / 0.8935 / 0.1517; KNN 0.8460 / 0.9073 / 0.2284
 - Not used for any decision.
+
+## v2 KNN rerun at K=16 (train only)
+- Command: `python scripts/train_models.py --models knn_distance_weighted` on the K=16 train table (1,862,764 labelled rows, 80 trips). Upserted into `model_comparison.csv` / `cv_folds.csv`; plots redrawn. All five rows of `model_comparison.csv` are now v2 (K=16).
+- KNN CV Top-1 0.8371 ± 0.0544 (v1 K=8: 0.8379), macro F1 0.9042, log loss 0.1762 (still the worst), train Top-1 0.9951 vs validation 0.8371: memorises, heavy overfit. Inference 472 ms per 1,000 rows (slowest).
+- Ranking unchanged: LightGBM 0.8520 > RF 0.8489 > MLP 0.8459 > LogReg 0.8395 > KNN 0.8371.
