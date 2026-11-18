@@ -13,7 +13,7 @@ classifier-only vs HMM comparison, Folium maps, and a PDF report.
 ## Ownership: only edit files you own
 | Owner | Files |
 |---|---|
-| Sanjay | `pathsnap/geo.py`, `candidates.py`, `labels.py`, `features.py`, `hmm.py`, `pipeline.py`, `viz.py`, `ui/map_view.py`, `scripts/build_dataset.py`, `scripts/hmm_eval.py`, `scripts/make_report_maps.py`, `report/hmm_and_data_pipeline.md` |
+| Sanjay | `pathsnap/geo.py`, `candidates.py`, `labels.py`, `features.py`, `hmm.py`, `pipeline.py`, `viz.py`, `ui/map_view.py`, `scripts/build_dataset.py`, `scripts/candidate_stats.py`, `scripts/hmm_eval.py`, `scripts/make_report_maps.py`, `report/hmm_and_data_pipeline.md` |
 | Kushal | `pathsnap/models.py`, `scripts/train_models.py`, `scripts/bayes_opt.py`, `scripts/export_model.py`, `artifacts/`, `report/models_and_tuning.md` |
 | Samarth | `scripts/eda.py`, `notebooks/`, `api/`, `ui/app.py`, `ui/requirements.txt`, `README.md`, `report/eda_maps_api_ui.md` |
 | Shared (ask first) | `pathsnap/config.py`, `pathsnap/io.py`, `pathsnap/metrics.py`, `docs/CONTRACTS.md`, `requirements.txt`, `CLAUDE.md` |

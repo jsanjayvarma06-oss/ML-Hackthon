@@ -14,9 +14,9 @@ One row per (GPS point, candidate arc).
 | column | type | meaning |
 |---|---|---|
 | `trip_id` | str | e.g. `"00000005"`. Use as the group for GroupKFold |
-| `point_idx` | int | row index of the GPS point in the cleaned track |
+| `point_idx` | int | row index of the GPS point in the original `.track` file (points removed by cleaning have no rows) |
 | `cand_rank` | int | 0 = nearest candidate |
-| `arc_id` | int | candidate arc id (local to the trip) |
+| `arc_id` | int | candidate arc id (local to the trip, canonical: duplicates of the same from/to pair map to the first one) |
 | `true_arc` | int | reference arc for this point, `-1` = unlabelled |
 | `label` | int | 1 if `arc_id == true_arc`, else 0 |
 | *features* | float | exactly the names in `pathsnap.features.FEATURE_COLUMNS` |
