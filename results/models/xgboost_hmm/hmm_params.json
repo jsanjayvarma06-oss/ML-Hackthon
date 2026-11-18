@@ -1,0 +1,16 @@
+{
+  "classifier_hmm": {
+    "beta": 15.0,
+    "floor": 50.0,
+    "emission_weight": 0.07,
+    "dist_weight": 0.0,
+    "train_top1": 0.9506717736228235
+  },
+  "distance_hmm": {
+    "beta": 5.0,
+    "floor": 25.0,
+    "emission_weight": 1.0,
+    "train_top1": 0.9422226063844155
+  },
+  "fitted_on": "train, OOF probabilities, GroupKFold by trip"
+}

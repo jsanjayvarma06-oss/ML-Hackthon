@@ -18,7 +18,28 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from pathsnap import io, labels, metrics, pipeline
-from pathsnap.config import ARTIFACTS_DIR, EVAL_DIR
+from pathsnap.config import ARTIFACTS_DIR, EVAL_DIR as _EVAL_DIR_SETTING
+
+
+def _is_trip_dir(d):
+    return d.is_dir() and (d / f"{d.name}.track").exists()
+
+
+def resolve_eval_dir(path):
+    """The folder that directly holds the trip folders.
+
+    The released zips nest one level (evaluator_test/evaluator_test/<trip>/), so
+    PATHSNAP_EVAL_DIR may point at the outer or the inner folder. If the given folder has
+    no trip folders but one sub-folder does, use that sub-folder.
+    """
+    path = Path(path)
+    if not path.is_dir() or any(_is_trip_dir(d) for d in path.iterdir()):
+        return path
+    inner = [d for d in path.iterdir() if d.is_dir() and any(_is_trip_dir(t) for t in d.iterdir())]
+    return inner[0] if len(inner) == 1 else path
+
+
+EVAL_DIR = resolve_eval_dir(_EVAL_DIR_SETTING)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("pathsnap.api")
@@ -176,26 +197,36 @@ def predict(req: PredictRequest):
     except NotImplementedError as e:
         raise HTTPException(501, f"Pipeline not finished yet: {e}")
 
-    # Scoring happens here, server side only.
-    route = io.load_route(EVAL_DIR, req.trip_id)
-    true_arc = labels.make_point_labels(trip, route)
+    # Scoring happens here, server side only. A trip without a .route file is still
+    # predicted and drawn; accuracy is then reported as None ("no reference route").
+    route_path = EVAL_DIR / req.trip_id / f"{req.trip_id}.route"
+    has_route = route_path.exists()
+    if has_route:
+        true_arc = labels.make_point_labels(trip, io.load_route(EVAL_DIR, req.trip_id))
+        top1 = metrics.top1_accuracy(true_arc, out["pred_arc"])
+        top1_clf = metrics.top1_accuracy(true_arc, out["pred_arc_classifier"])
+        n_scored = int((true_arc != metrics.UNLABELLED).sum())
+    else:
+        top1 = top1_clf = None
+        n_scored = 0
     result = {
         "trip_id": req.trip_id,
         "model": bundle.get("name"),
         "n_points": int(len(trip.track)),
+        "has_reference_route": has_route,
         "gps": [[float(lat), float(lon)] for lon, lat, _ in trip.track],
         "predicted_path": _arc_segments(trip, out["pred_arc"]),
         "metrics": {
-            "top1_accuracy": metrics.top1_accuracy(true_arc, out["pred_arc"]),
-            "top1_accuracy_classifier_only": metrics.top1_accuracy(true_arc, out["pred_arc_classifier"]),
+            "top1_accuracy": top1,
+            "top1_accuracy_classifier_only": top1_clf,
             "route_continuity": metrics.route_continuity(out["pred_arc"], trip.arcs),
-            "n_scored_points": int((true_arc != metrics.UNLABELLED).sum()),
+            "n_scored_points": n_scored,
         },
         "timing_ms": {**out.get("timing_ms", {}), "total": (time.perf_counter() - t0) * 1000},
     }
-    log.info("trip %s model=%s top1=%.3f continuity=%.3f total_ms=%.0f", req.trip_id, result["model"],
-             result["metrics"]["top1_accuracy"], result["metrics"]["route_continuity"],
-             result["timing_ms"]["total"])
+    log.info("trip %s model=%s top1=%s continuity=%.3f total_ms=%.0f", req.trip_id, result["model"],
+             "no reference route" if top1 is None else f"{top1:.3f}",
+             result["metrics"]["route_continuity"], result["timing_ms"]["total"])
     return result
 
 

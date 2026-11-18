@@ -66,3 +66,37 @@ All development runs use train only (GroupKFold(5) by trip_id, SEED=42). student
 - Command: `python scripts/train_models.py --models knn_distance_weighted` on the K=16 train table (1,862,764 labelled rows, 80 trips). Upserted into `model_comparison.csv` / `cv_folds.csv`; plots redrawn. All five rows of `model_comparison.csv` are now v2 (K=16).
 - KNN CV Top-1 0.8371 ± 0.0544 (v1 K=8: 0.8379), macro F1 0.9042, log loss 0.1762 (still the worst), train Top-1 0.9951 vs validation 0.8371: memorises, heavy overfit. Inference 472 ms per 1,000 rows (slowest).
 - Ranking unchanged: LightGBM 0.8520 > RF 0.8489 > MLP 0.8459 > LogReg 0.8395 > KNN 0.8371.
+
+## NB1. Gaussian Naive Bayes (untuned, train only)
+- Commands: `python scripts/train_models.py --models naive_bayes`, then `python scripts/hmm_eval.py --oof results/models/oof_naive_bayes.parquet` (its outputs were copied to `results/pipeline/naive_bayes/` so the shared LightGBM `hmm_*` files stay unchanged), then a bundle fit with `export_model.fit_bundle("naive_bayes", ...)` -> `artifacts/models/naive_bayes.joblib` (1.8 KB, reload check passed).
+- Date: 2026-11-18. Data: v2 train table (K=16), 1,862,764 labelled rows, 80 trips, GroupKFold(5) by trip_id, SEED=42. student_test not touched and not run.
+- What it is, simply: for each class ("this arc is the true one" / "it is not") it learns a bell curve (mean and spread) for every feature, then multiplies the per-feature likelihoods together. Multiplying is only correct if the features are independent given the class (the "naive" assumption). Ours are not: distance to the arc, rank among candidates and distance relative to the best candidate all say nearly the same thing, so each fact is counted several times and the output probabilities become too extreme. The ranking within a point can survive this, the probability values do not.
+- Model: StandardScaler + GaussianNB(var_smoothing=1e-9). No hyperparameter search (it has one barely relevant knob), so it is not in the Optuna study.
+- Result (CV mean over 5 folds, `model_comparison.csv`):
+
+| model | CV Top-1 | CV macro F1 | CV log loss | train Top-1 | OOF route continuity |
+|---|---|---|---|---|---|
+| naive_bayes | 0.8024 ± 0.0379 | 0.7644 | 0.8410 | 0.8036 | 0.9132 |
+| lightgbm (reference, see `model_comparison.csv`) | 0.8520 ± 0.0580 | 0.9157 | n/a here | n/a | n/a |
+
+- Reading: lowest Top-1 of the six models (-0.050 vs LightGBM, bigger than the other gaps) and by far the worst log loss (0.841 vs about 0.11-0.18 for the rest), which is the over-confidence described above. Train and validation Top-1 are almost equal (0.8036 vs 0.8024), so it underfits (too rigid) rather than overfits. OOF precision (macro) is 0.718 against recall 0.903: it flags too many non-true candidates as positive. It is the fastest to fit (0.8 s per fold) and tiny to store.
+- Classifier + HMM (`results/pipeline/naive_bayes/hmm_comparison.csv`, HMM parameters re-fitted on NB's own OOF probabilities, grid in `hmm_grid.csv`, chosen beta=15, floor=50, emission_weight=0.03):
+
+| method | Top-1 (pooled) | route continuity |
+|---|---|---|
+| classifier only (NB) | 0.8020 | 0.9325 |
+| classifier + HMM (NB) | 0.9369 | 0.9799 |
+| distance + HMM (no classifier) | 0.9422 | 0.9802 |
+| classifier + HMM (tuned LightGBM, reference, E5) | 0.9510 | 0.9806 |
+
+- Reading: the HMM lifts NB by +0.135, but the result is below the distance-only HMM (0.9422): NB's over-confident probabilities are not better evidence than plain distance, and the fit picked the smallest emission weight (0.03) on the grid edge, i.e. it wants to trust NB as little as allowed. NB is a useful low baseline for the report, not a candidate for the final model.
+- The bundle `artifacts/models/naive_bayes.joblib` carries these NB-specific hmm_params (the other per-model bundles carry the LightGBM-fitted ones). Smoke test: `pipeline.predict_trip` on train trip 4 returns a prediction for all 1,064 points.
+
+## M5. Sixth model: XGBoost (train only)
+- Added `models.xgboost()` (depth-limited boosted trees, `tree_method=hist`, n_estimators 400, max_depth 6, learning_rate 0.05, min_child_weight 5, subsample/colsample 0.8, reg_lambda 1, seed 42), registered in `get_models()` / `FACTORIES`, `xgboost` added to `requirements.txt`. `train_models.py` now passes an eval set for XGBoost and reads `evals_result()`, so the loss curve (`plots/loss_curve_xgboost.png`, CV fold 0) is a real per-iteration history. Untuned defaults, no search.
+- Command: `python scripts/train_models.py --models xgboost` (GroupKFold(5) by trip_id on the 80 train trips, 1,862,764 labelled rows, K=16 table). Row upserted into `model_comparison.csv` / `cv_folds.csv`; OOF in `oof_xgboost.parquet`.
+- Result: CV Top-1 0.8507 ± 0.0593, macro F1 0.9152, log loss 0.0739, train Top-1 0.8784, OOF route continuity 0.9296, ~25 s per fold fit. Pooled OOF Top-1 0.8490 (classifier only).
+- Classifier + HMM on its OOF probabilities (same grid as `hmm_eval.py`, output redirected so Sanjay's `results/pipeline/` files were NOT overwritten): `results/models/xgboost_hmm/` (`hmm_comparison.csv`, `hmm_grid.csv`, `hmm_params.json`, per-trip CSVs). Classifier only 0.8490 -> classifier + HMM 0.9507 Top-1 (continuity 0.9443 -> 0.9806); fitted HMM params beta 15, floor 50, emission_weight 0.07. For reference the tuned LightGBM + HMM in `results/pipeline/` is 0.9510.
+- Reading: XGBoost is in the same range as LightGBM (Top-1 0.8507 vs 0.8520, macro F1 0.9152 vs 0.9157, log loss 0.0739 vs 0.0736), slightly behind on every metric; differences are far below the fold spread (±0.06). After the HMM the two are within 0.0003. Folds are not independent of the HMM grid choice (HMM params tuned on the same train OOF), so treat both as mildly optimistic.
+- Export: `artifacts/models/xgboost.joblib` (0.56 MB, reload check passed) holds hmm_params from the XGBoost-specific fit above. `artifacts/model.joblib` (tuned LightGBM) unchanged.
+- student_test and evaluator trips: not run, not used.

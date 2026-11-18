@@ -68,6 +68,7 @@ Until this file exists, Sanjay tests the HMM with a distance-only emission
   "trip_id": "00000015",
   "model": "lightgbm_tuned",
   "n_points": 1045,
+  "has_reference_route": true,
   "gps": [[lat, lon], ...],
   "predicted_path": [[[lat, lon], [lat, lon]], ...],
   "metrics": {"top1_accuracy": 0.0, "top1_accuracy_classifier_only": 0.0,
@@ -76,4 +77,8 @@ Until this file exists, Sanjay tests the HMM with a distance-only emission
 }
 ```
 
-The reference route never appears in any response.
+The reference route never appears in any response. If the trip folder has no `.route` file,
+`has_reference_route` is false, both Top-1 values are `null` and `n_scored_points` is 0; the
+prediction and route continuity are still returned. `PATHSNAP_EVAL_DIR` may point at the folder
+that holds the trip folders or at a folder one level above it (the released zips nest
+`evaluator_test/evaluator_test/<trip>/`); the API descends one level automatically.

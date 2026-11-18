@@ -185,6 +185,8 @@ if result and result["trip_id"] == trip_id:
     st.subheader(f"Trip {result.get('trip_id', trip_id)}: {result.get('n_points', 0):,} GPS points")
     if result.get("model"):
         st.caption(f"Model used: {result['model']}")
+    if result.get("has_reference_route") is False:
+        st.info("No reference route for this trip, so accuracy is N/A. The predicted route is still shown.")
     c1, c2, c3 = st.columns(3)
     c4, c5, _ = st.columns(3)
     c1.metric("Top-1 accuracy (final)", pct(m.get("top1_accuracy")),
