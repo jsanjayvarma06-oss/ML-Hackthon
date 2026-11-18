@@ -24,6 +24,7 @@ DEFAULT_PARAMS = {
     "floor": 25.0,        # nats; largest transition penalty, also used when unreachable
     "sigma": 10.0,        # metres; Gaussian width of the distance-only emission
     "emission_weight": 1.0,  # multiplies the emission log-probability
+    "dist_weight": 0.0,   # v2: adds dist_weight * Gaussian(distance) to the classifier emission
     "prob_eps": 1e-6,     # classifier probabilities are clipped to [eps, 1] before the log
 }
 # Search radius for the network distance: twice the GPS distance plus slack, capped.
@@ -49,6 +50,22 @@ def distance_emission(cand_dist, params=None):
     """
     p = merge_params(params)
     return [-0.5 * (np.asarray(d) / p["sigma"]) ** 2 for d in cand_dist]
+
+
+def mixed_emission(prob_list, cand_dist, params=None):
+    """Classifier emission plus a distance term, in the units `decode` expects.
+
+    decode multiplies every emission by emission_weight, so the result here is
+        log p + (dist_weight / emission_weight) * (-0.5 (d / sigma)^2)
+    which after decoding gives emission_weight * log p + dist_weight * Gaussian(d).
+    With dist_weight 0 this is exactly classifier_emission. Chosen on train (E5).
+    """
+    p = merge_params(params)
+    clf = classifier_emission(prob_list, params)
+    if not p["dist_weight"]:
+        return clf
+    r = p["dist_weight"] / p["emission_weight"]
+    return [c + r * d for c, d in zip(clf, distance_emission(cand_dist, params))]
 
 
 def classifier_emission(prob_list, params=None):

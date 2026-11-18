@@ -1,0 +1,17 @@
+{
+  "model": "lightgbm",
+  "params": {
+    "n_estimators": 450,
+    "learning_rate": 0.032553902380298066,
+    "num_leaves": 50,
+    "min_child_samples": 121,
+    "subsample": 0.5916089000567233,
+    "colsample_bytree": 0.5722606933652553,
+    "reg_lambda": 0.1968398817434543
+  },
+  "best_cv_top1_3fold": 0.8496410605058444,
+  "n_trials": 40,
+  "seed": 42,
+  "why_this_model": "lightgbm: CV Top-1 0.8505, CV log loss 0.1121 (best Top-1 0.8505; ties within 0.002 -> log loss)",
+  "tune_folds": 3
+}

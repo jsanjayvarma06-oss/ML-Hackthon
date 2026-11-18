@@ -90,6 +90,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", help="model to tune (default: best CV Top-1 in model_comparison.csv)")
     ap.add_argument("--trials", type=int, default=40)
+    ap.add_argument("--reuse-best", action="store_true",
+                    help="skip the search: reuse best_params.json (e.g. after the candidate table "
+                         "changed) and only redo the 5-fold tuned-vs-untuned CV and tuned OOF")
     args = ap.parse_args(argv)
     if args.model:
         name, why = args.model, "chosen with --model"
@@ -102,6 +105,11 @@ def main(argv=None):
     folds = list(GroupKFold(n_splits=TUNE_FOLDS).split(train, groups=train["trip_id"]))
     max_pts = models.TRAIN_SUBSAMPLE.get(name)
     trials_csv = OUT / "optuna_trials.csv"
+    if args.reuse_best:
+        b = json.loads((OUT / "best_params.json").read_text())
+        name, best_params = b["model"], b["params"]
+        print(f"Reusing best params from best_params.json for {name}: {best_params}", flush=True)
+        return tuned_vs_untuned(name, best_params, train, cols)
     if trials_csv.exists():
         trials_csv.unlink()  # one study per run; the log is rewritten from scratch
 
@@ -165,8 +173,13 @@ def main(argv=None):
     except Exception as e:  # importance needs >1 distinct values; plot is optional
         print("importance plot skipped:", e)
 
-    # tuned vs untuned, 5-fold CV exactly as train_models.py (same folds, same metrics)
-    family = models.get_models()[name][0]
+    tuned_vs_untuned(name, best_params, train, cols)
+
+
+def tuned_vs_untuned(name, best_params, train, cols):
+    """5-fold CV of the tuned model exactly as train_models.py (same folds, same metrics);
+    writes tuned_vs_untuned.csv, cv_folds_tuned.csv and oof_<name>_tuned.parquet."""
+    plots = OUT / "plots"
     arcs_cache = {}
     tuned = models.build(name, best_params)
     cv, oof, summ, hist = tm.cross_validate(f"{name}_tuned", tuned, train, cols, arcs_cache)

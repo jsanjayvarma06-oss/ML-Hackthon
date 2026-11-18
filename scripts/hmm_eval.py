@@ -33,9 +33,10 @@ from pathsnap import features, hmm, io, labels, metrics, pipeline  # noqa: E402
 from pathsnap.config import ARTIFACTS_DIR, RESULTS_DIR, STUDENT_TEST_DIR, TRAIN_DIR  # noqa: E402
 
 OUT = RESULTS_DIR / "pipeline"
-BETAS = [1, 2, 5, 10, 20, 50]
-FLOORS = [25, 50, 100, 200]
+BETAS = [5, 10, 20, 50]
+FLOORS = [25, 50]
 WEIGHTS = [0.05, 0.1, 0.25, 0.5, 1.0]
+DIST_MIX = [0.0, 0.25, 0.5, 1.0]   # v2: distance term added to the classifier emission
 DIST_WEIGHTS = [0.25, 0.5, 1.0, 2.0, 4.0]
 
 
@@ -57,8 +58,9 @@ def _grid(oof_path):
     for beta, floor, w in itertools.product(BETAS, FLOORS, DIST_WEIGHTS):
         g.append(("distance_hmm", "dist", dict(beta=beta, floor=floor, emission_weight=w)))
     if oof_path:
-        for beta, floor, w in itertools.product(BETAS, FLOORS, WEIGHTS):
-            g.append(("classifier_hmm", "clf", dict(beta=beta, floor=floor, emission_weight=w)))
+        for beta, floor, w, dw in itertools.product(BETAS, FLOORS, WEIGHTS, DIST_MIX):
+            g.append(("classifier_hmm", "clf", dict(beta=beta, floor=floor, emission_weight=w,
+                                                    dist_weight=dw)))
     return g
 
 
@@ -80,16 +82,20 @@ def one_trip(args):
         # are never scored; they get the same probability for every candidate (no preference),
         # so the transitions alone decide the path through them.
         prob = prob.fillna(0.5)
-        emis["clf"] = hmm.classifier_emission(
-            pipeline.split_by_point(df, prob.to_numpy(), cand_arcs, keep_idx))
+        emis["clf_prob"] = pipeline.split_by_point(df, prob.to_numpy(), cand_arcs, keep_idx)
+        emis["clf"] = hmm.classifier_emission(emis["clf_prob"])
     rows = []
     # argmax baselines (no HMM)
     for name, kind in [("distance_only", "dist"), ("classifier_only", "clf")]:
         if kind in emis:
             pred = hmm.argmax_arcs(cand_arcs, emis[kind], keep_idx, n)
             rows.append((name, None, *_score(true, pred, trip.arcs)))
+    probs = emis.get("clf_prob")
     for i, (name, kind, p) in enumerate(_grid(oof_path)):
-        pred = hmm.decode(cand_arcs, emis[kind], net, keep_idx, segment_id, n, p)
+        e = emis[kind]
+        if kind == "clf" and p.get("dist_weight"):
+            e = hmm.mixed_emission(probs, cand_dist, p)
+        pred = hmm.decode(cand_arcs, e, net, keep_idx, segment_id, n, p)
         rows.append((name, i, *_score(true, pred, trip.arcs)))
     return trip_id, rows
 
@@ -111,16 +117,16 @@ def train_mode(oof_path):
     pooled["route_continuity"] = pooled.cont_ok / pooled.cont_pairs
     # trial log: every grid point with its parameters
     log = pooled[pooled.grid_idx >= 0].copy()
-    for key in ["sigma", "beta", "floor", "emission_weight"]:
+    for key in ["sigma", "beta", "floor", "emission_weight", "dist_weight"]:
         log[key] = [grid[i][2].get(key, np.nan) for i in log.grid_idx]
     OUT.mkdir(parents=True, exist_ok=True)
-    log[["method", "sigma", "beta", "floor", "emission_weight", "top1", "route_continuity"]].to_csv(
+    log[["method", "sigma", "beta", "floor", "emission_weight", "dist_weight", "top1", "route_continuity"]].to_csv(
         OUT / "hmm_grid.csv", index=False)
 
     best = {}
     for name in log.method.unique():
         row = log[log.method == name].sort_values(["top1", "route_continuity"], ascending=False).iloc[0]
-        best[name] = {k: float(row[k]) for k in ["sigma", "beta", "floor", "emission_weight"] if not np.isnan(row[k])}
+        best[name] = {k: float(row[k]) for k in ["sigma", "beta", "floor", "emission_weight", "dist_weight"] if not np.isnan(row[k])}
         best[name]["train_top1"] = float(row.top1)
         best[name]["_grid_idx"] = int(row.grid_idx)
     summary = []
