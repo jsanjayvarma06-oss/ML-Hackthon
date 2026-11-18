@@ -59,11 +59,14 @@ Until this file exists, Sanjay tests the HMM with a distance-only emission
 
 - `GET /health` -> `{"status": "ok", "eval_dir": "..."}`
 - `GET /trips` -> `{"trips": ["00000015", ...]}`
-- `POST /predict` with `{"trip_id": "00000015"}` ->
+- `GET /models` -> `{"models": ["lightgbm_tuned", "logistic_regression", ...], "default": "lightgbm_tuned"}`
+  (default = `artifacts/model.joblib`; others = `artifacts/models/<name>.joblib`, same bundle format)
+- `POST /predict` with `{"trip_id": "00000015"}` or `{"trip_id": "00000015", "model": "<name>"}` ->
 
 ```json
 {
   "trip_id": "00000015",
+  "model": "lightgbm_tuned",
   "n_points": 1045,
   "gps": [[lat, lon], ...],
   "predicted_path": [[[lat, lon], [lat, lon]], ...],
