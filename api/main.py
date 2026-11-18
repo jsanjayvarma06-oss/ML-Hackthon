@@ -8,13 +8,15 @@ The reference route is read only inside /predict to compute accuracy. It is neve
 passed to the model and never returned to the UI.
 """
 import logging
+import re
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from pathsnap import io, labels, metrics, pipeline
@@ -45,6 +47,17 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("pathsnap.api")
 
 app = FastAPI(title="PathSnap API")
+
+# Enable CORS for two-laptop communication (Laptop 2 Streamlit UI / Web Client)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+TRIP_ID_REGEX = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 _bundle = None
 _extra = {}  # name -> bundle, for the optional models in artifacts/models/
 
@@ -103,8 +116,10 @@ class PredictRequest(BaseModel):
 
 
 @app.get("/health")
-def health():
+def health(request: Request = None):
     """Cheap liveness check. Reports the model name only if the model file exists."""
+    client_ip = request.client.host if request and request.client else "unknown"
+    log.info("[CLIENT] GET /health from %s", client_ip)
     name = None
     if _bundle is not None:
         name = _bundle.get("name")
@@ -113,8 +128,13 @@ def health():
             name = pipeline.load_model(MODEL_PATH).get("name")
         except Exception as e:  # corrupt file: say so instead of crashing /health
             log.warning("could not read model file: %s", e)
-    return {"status": "ok", "eval_dir": str(EVAL_DIR), "model": name,
-            "model_file_found": MODEL_PATH.exists()}
+    return {
+        "status": "ok",
+        "api_version": "1.0.0",
+        "eval_dir": str(EVAL_DIR),
+        "model": name,
+        "model_file_found": MODEL_PATH.exists(),
+    }
 
 
 @app.get("/models")
@@ -172,19 +192,23 @@ def comparison():
 
 
 @app.get("/trips")
-def trips():
+def trips(request: Request = None):
     """List the trip ids available in PATHSNAP_EVAL_DIR."""
+    client_ip = request.client.host if request and request.client else "unknown"
     if not EVAL_DIR.exists():
         raise HTTPException(500, f"Trip folder not found: {EVAL_DIR}. Set PATHSNAP_EVAL_DIR.")
     ids = io.list_trips(EVAL_DIR)
-    log.info("GET /trips -> %d trips", len(ids))
+    log.info("[CLIENT] GET /trips from %s -> %d trips", client_ip, len(ids))
     return {"trips": ids}
 
 
 @app.post("/predict")
-def predict(req: PredictRequest):
+def predict(req: PredictRequest, request: Request = None):
     """Run the full pipeline on one trip and return GPS, predicted path, metrics and timing."""
-    log.info("POST /predict trip_id=%s model=%s", req.trip_id, req.model or "default")
+    client_ip = request.client.host if request and request.client else "unknown"
+    log.info("[CLIENT] POST /predict trip_id=%s model=%s from %s", req.trip_id, req.model or "default", client_ip)
+    if not req.trip_id or not TRIP_ID_REGEX.match(req.trip_id):
+        raise HTTPException(400, f"Invalid trip_id format: '{req.trip_id}'. Only alphanumeric characters, dashes, and underscores allowed.")
     if not EVAL_DIR.exists():
         raise HTTPException(500, f"Trip folder not found: {EVAL_DIR}. Set PATHSNAP_EVAL_DIR.")
     bundle = get_bundle(req.model)
@@ -209,22 +233,28 @@ def predict(req: PredictRequest):
     else:
         top1 = top1_clf = None
         n_scored = 0
+
+    elapsed_s = time.perf_counter() - t0
     result = {
+        "success": True,
         "trip_id": req.trip_id,
         "model": bundle.get("name"),
         "n_points": int(len(trip.track)),
         "has_reference_route": has_route,
         "gps": [[float(lat), float(lon)] for lon, lat, _ in trip.track],
         "predicted_path": _arc_segments(trip, out["pred_arc"]),
+        "predicted_route": [int(a) for a in out["pred_arc"] if a != metrics.UNLABELLED],
         "metrics": {
             "top1_accuracy": top1,
             "top1_accuracy_classifier_only": top1_clf,
             "route_continuity": metrics.route_continuity(out["pred_arc"], trip.arcs),
             "n_scored_points": n_scored,
         },
-        "timing_ms": {**out.get("timing_ms", {}), "total": (time.perf_counter() - t0) * 1000},
+        "timing_ms": {**out.get("timing_ms", {}), "total": elapsed_s * 1000},
+        "processing_time_seconds": round(elapsed_s, 4),
+        "message": "Prediction completed successfully",
     }
-    log.info("trip %s model=%s top1=%s continuity=%.3f total_ms=%.0f", req.trip_id, result["model"],
+    log.info("[RESPONSE] trip %s model=%s top1=%s continuity=%.3f total_ms=%.0f", req.trip_id, result["model"],
              "no reference route" if top1 is None else f"{top1:.3f}",
              result["metrics"]["route_continuity"], result["timing_ms"]["total"])
     return result
