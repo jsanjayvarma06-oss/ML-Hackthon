@@ -1,6 +1,6 @@
 # PathSnap technical report (team skeleton)
 
-> **Status: filled from train results (data, EDA, all 5 models, tuning, HMM). Student-test cells are placeholders.** Layout follows `Deliverables.pdf` sections 2.2 to 8. Every number is
+> **Status: two pipeline versions are described. v1 = K=8 candidates and the first HMM (its one-time student_test run is done). v2 = K=16 candidates, HMM with gap bridging and a U-turn penalty (train results only; a v2 student_test run is pending the team's approval). Every table says which version it is.** Layout follows `Deliverables.pdf` sections 2.2 to 8. Every number is
 > either (a) quoted from a file already in `results/` (the file is named next to it), or
 > (b) a placeholder written as `[[TODO: value <- results/<file>]]`. Nothing here has been
 > measured unless a file is cited. Replace each placeholder only with the real value from
@@ -41,7 +41,7 @@ for every GPS point, which arc the vehicle was on, then join those arcs into a c
    self-loops are never candidates (`candidates.canonical_arc_ids`, `usable_arcs`). Without this
    two identical roads would be a coin flip.
 5. **Candidate generation** (`candidates.generate_candidates`). For each kept GPS point we keep
-   the **K nearest arcs within 75 m**. A KD-tree over points sampled every 10 m along each arc
+   the **K nearest arcs within 75 m** (v1 used K=8; v2 uses K=16, see below). A KD-tree over points sampled every 10 m along each arc
    keeps this fast on networks of up to about 300k arcs; then exact point-to-segment distance is
    computed. Why K=8: from `results/pipeline/candidate_miss_rate.csv` (train, 185,107 labelled
    points, miss = the true arc is not among the candidates):
@@ -57,7 +57,12 @@ for every GPS point, which arc the vehicle was on, then join those arcs into a c
 
    K=1 (just the nearest arc) misses 44.6% mostly because a two-way road gives two arcs at the
    same distance: distance alone cannot tell direction. K=16 only gains another 0.4% but doubles
-   the table size, so we chose K=8. This choice used train only.
+   the table size, so v1 used K=8. **v2 raised it to K=16** (miss rate 0.48%) because the team set a
+   target of at least 95% Top-1 after seeing the v1 student_test result, and a 0.44% candidate miss
+   is a hard ceiling on accuracy (error breakdown in section 5). Be upfront in the viva: the K=16
+   change was motivated by a target set after the v1 student_test run, although K and every v2
+   parameter were chosen using train data only. There is no 95% threshold in the five official PDFs;
+   it is our own team target. The cost of K=16 is a larger candidate table (about 1.93 million train rows).
 6. **Labels from the route** (`pathsnap/labels.py`). The route is an ordered arc list with far
    fewer rows than the track, so we align them with dynamic programming: each GPS point gets a
    route position, positions never go backwards, total point-to-arc distance is minimised.
@@ -69,12 +74,13 @@ for every GPS point, which arc the vehicle was on, then join those arcs into a c
 7. **Candidate table.** One row per (GPS point, candidate arc) with a 0/1 label (1 if the arc is
    the aligned reference arc). Built by `python scripts/build_dataset.py`. Dataset size
    Result (`results/pipeline/dataset_summary.csv`, `results/pipeline/EXPERIMENTS.md`, entry E1):
-train has 80 trips, 208,417 GPS points, 208,246 kept after cleaning, 185,107 labelled points and
-1,241,235 candidate rows; 1,189,495 of those rows (labelled points only) are used for training.
-The pooled candidate miss rate is 0.0092 on train. (`EXPERIMENTS.md` also lists 194,674 points that
+train has 80 trips, 208,417 GPS points, 208,246 kept after cleaning, 185,107 labelled points.
+v1 (K=8): 1,241,235 candidate rows, 1,189,495 labelled rows used for training, pooled candidate miss
+rate 0.0092. v2 (K=16): 1,933,563 candidate rows, 1,862,764 labelled rows used for training, miss
+rate 0.0048 (`results/pipeline/dataset_summary.csv`; v1 copy in `results/pipeline/v1_k8/`). (`EXPERIMENTS.md` also lists 194,674 points that
 have at least one candidate; the rest are removed points or points with no road within 75 m.)
-student_test, only described and never used for a choice: 10 trips, 125,554 rows, 19,132
-labelled points, miss rate 0.0025.
+student_test (v1 table, K=8), only described: 10 trips, 125,554 rows, 19,132 labelled points,
+miss rate 0.0025. The student_test table has not been rebuilt for K=16.
 
 The route file is used only to make labels (and for the API's scoring). It is never a feature.
 
@@ -161,24 +167,26 @@ which is imbalanced (most candidates are wrong), so it averages the F1 of both c
 Log loss measures how honest the probabilities are, which matters because the HMM uses them.
 
 ### 3.1 Overall comparison table
-Source for every filled cell: `results/models/model_comparison.csv` (5-fold GroupKFold CV on train,
-untuned defaults, same folds for every model). Top-1 is mean over folds ± standard deviation. Route
-continuity is computed on out-of-fold classifier-only predictions (no HMM). Inference time is per
-1,000 candidate rows. The Student-test Macro F1 column comes from the one-time student_test run
-(`results/models/final_student_test.csv`: each model refit on all 80 train trips, scored once on the 10
-student_test trips, 19,132 labelled points, nothing changed afterwards).
+**Versions.** CV numbers below are v2 (K=16 candidates, 1,862,764 labelled training rows), from
+`results/models/model_comparison.csv`; same 5 GroupKFold folds for every model. Exception: the KNN
+row was not re-run and is still the v1 (K=8) result (1,189,495 rows). The v1 table is kept in
+`results/models/v1_k8/`. The Student-test Macro F1 column is from the one-time v1 (K=8) run
+(`results/models/final_student_test.csv`, each model refit on all 80 train trips, scored once on 10
+student_test trips, 19,132 labelled points). A v2 student_test run has not been done. Top-1 is mean
+over folds ± standard deviation. Route continuity is on out-of-fold classifier-only predictions
+(no HMM). Inference time is per 1,000 candidate rows.
 
-| Model | Algorithm family | Key configuration | CV Macro F1 | CV Top-1 | Route continuity | Student-test Macro F1 | CV log loss | Inference time |
+| Model | Algorithm family | Key configuration | CV Macro F1 | CV Top-1 | Route continuity | Student-test Macro F1 (v1) | CV log loss | Inference time |
 |---|---|---|---|---|---|---|---|---|
-| 1 Logistic Regression | linear / probabilistic | C=1.0, standardised inputs | 0.8856 | 0.8372 ± 0.0569 | 0.9094 | 0.8935 | 0.1622 | 0.15 ms |
-| 2 Random Forest | bagging ensemble | 150 trees, max depth 14, min leaf 20, max features sqrt | 0.9092 | 0.8480 ± 0.0559 | 0.9209 | 0.9157 | 0.1157 | 2.09 ms |
-| 3 LightGBM | boosting | 400 trees, lr 0.05, 31 leaves, min child 50 | 0.9105 | 0.8505 ± 0.0551 | 0.9287 | 0.9167 | 0.1121 | 3.77 ms |
-| 4 MLP | neural network | hidden (64, 32), alpha 1e-4, trained on 100,000 points per fit | 0.9071 | 0.8451 ± 0.0563 | 0.9276 | 0.9129 | 0.1190 | 0.32 ms |
-| 5 KNN (distance-weighted) | instance-based | 25 neighbours, trained on 40,000 points per fit | 0.9021 | 0.8379 ± 0.0549 | 0.9191 | 0.9073 | 0.2536 | 312.8 ms |
+| 1 Logistic Regression | linear / probabilistic | C=1.0, standardised inputs | 0.8912 | 0.8395 ± 0.0584 | 0.9129 | 0.8935 | 0.1077 | 0.10 ms |
+| 2 Random Forest | bagging ensemble | 150 trees, max depth 14, min leaf 20, max features sqrt | 0.9140 | 0.8489 ± 0.0577 | 0.9226 | 0.9157 | 0.0759 | 2.04 ms |
+| 3 LightGBM | boosting | 400 trees, lr 0.05, 31 leaves, min child 50 | 0.9157 | 0.8520 ± 0.0580 | 0.9297 | 0.9167 | 0.0736 | 3.56 ms |
+| 4 MLP | neural network | hidden (64, 32), alpha 1e-4, trained on 100,000 points per fit | 0.9112 | 0.8459 ± 0.0558 | 0.9282 | 0.9129 | 0.0790 | 0.39 ms |
+| 5 KNN (distance-weighted), v1 K=8 row | instance-based | 25 neighbours, trained on 40,000 points per fit | 0.9021 | 0.8379 ± 0.0549 | 0.9191 | 0.9073 | 0.2536 | 312.8 ms |
 | Baseline: nearest arc | none | K=1 | N/A, not a probabilistic classifier | about 0.554 train (student-test 0.5351) | 0.8243 train (student-test 0.8209) | N/A | N/A | N/A |
 
-**Student-test results (partition: student_test, 10 trips; `results/models/final_student_test.csv`).**
-Top-1 is observation level (best candidate per GPS point), Macro F1 and log loss are on the candidate yes/no label.
+**Student-test results, v1 (partition: student_test, 10 trips; `results/models/final_student_test.csv`).**
+Top-1 is observation level (best candidate per GPS point); Macro F1 and log loss are on the candidate yes/no label.
 
 | Model | Top-1 | Macro F1 | Log loss | Route continuity (classifier only) | Inference ms / 1,000 rows |
 |---|---|---|---|---|---|
@@ -189,16 +197,17 @@ Top-1 is observation level (best candidate per GPS point), Macro F1 and log loss
 | MLP | 0.8558 | 0.9129 | 0.1079 | 0.9382 | 0.36 |
 | KNN (distance-weighted) | 0.8460 | 0.9073 | 0.2284 | 0.9312 | 332.74 |
 
-The ordering matches the train CV ordering at the top (LightGBM first, tree models and MLP close, LogReg and KNN behind). All scores are a little higher than in CV; with only 10 student_test trips and a fold spread of about 0.055 in CV, we do not read anything into that difference.
+The ordering at the top matches the CV ordering (LightGBM first, tree models and MLP close, LogReg
+and KNN behind). Student-test scores are a little higher than CV; with only 10 trips and a CV fold
+spread of about 0.055, we do not read anything into that.
 
-**Model selection (decided on CV only, before any student_test run).** Rule written before tuning
-in `scripts/bayes_opt.py`: highest CV Top-1, ties within 0.002 broken by lower log loss.
-LightGBM has both the highest Top-1 (0.8505) and the lowest log loss (0.1121); runner-up Random
-Forest is 0.0025 behind. **Be honest about the margin:** the fold-to-fold standard deviation is
-about 0.055 for every model, because some validation folds contain hard trips, while the gap between
-best and worst model is only 0.013. Models are ranked on identical folds so the ordering is fair,
-but differences of a few thousandths should not be read as significant. LogReg and KNN are clearly
-behind on log loss; the three non-linear models are very close.
+**Model selection (decided on CV only, before any student_test run).** Rule written before tuning in
+`scripts/bayes_opt.py`: highest CV Top-1, ties within 0.002 broken by lower log loss. LightGBM has
+the highest Top-1 (0.8520 in v2, 0.8505 in v1) and the lowest log loss; runner-up Random Forest is
+0.0031 behind in v2. **Be honest about the margin:** the fold-to-fold standard deviation is about
+0.055 to 0.058 for every model (some validation folds contain hard trips), while the gap between
+best and worst model is about 0.014. Models are ranked on identical folds so the ordering is fair,
+but differences of a few thousandths should not be read as significant.
 
 ### 3.2 Per-model subsections
 Sources: `results/models/model_comparison.csv`, `cv_folds.csv`, `report/models_and_tuning.md`.
@@ -207,35 +216,35 @@ mean train vs validation over the 5 folds (`cv_folds.csv`).
 
 **Model 1: Logistic Regression**
 - **A1 Why suitable?** Simplest model that outputs a probability for "is this candidate the true arc?"; a fair baseline, and probabilities usable as HMM emissions. Inputs are standardised because features have different units.
-- **A2 Strengths / limitations:** Fast (1.7 s per fold) and stable, but linear, so it cannot express "close AND same direction". It trails the non-linear models on every metric.
+- **A2 Strengths / limitations:** Fast (3.8 s per fold in v2) and stable, but linear, so it cannot express "close AND same direction". It trails the non-linear models on every metric.
 - **B5 Hyperparameters:** C=1.0, no class weight, lbfgs, max_iter 1000, seed 42. **B6 Objective:** log loss with L2 regularisation.
 - **C7 to C8 Student-test:** Top-1 0.8466, Macro F1 0.8935, log loss 0.1517 (`final_student_test.csv`). Slightly below the other models on all three; the same linear-model limit seen in CV.
-- **C9 Fit:** train Top-1 0.8376 vs validation 0.8372; train log loss 0.1596 vs 0.1622. No overfitting; the model is limited by its linear form (mild underfitting).
+- **C9 Fit:** (v2) train Top-1 0.8391 vs validation 0.8395; train log loss 0.1062 vs 0.1077. No overfitting; the model is limited by its linear form (mild underfitting).
 
 **Model 2: Random Forest**
 - **A1 Why suitable?** Many decorrelated trees average out noise and capture non-linear rules without scaling.
-- **A2 Strengths / limitations:** Close to LightGBM (Top-1 within 0.003) but about 4 times slower to fit (37 s per fold).
+- **A2 Strengths / limitations:** Close to LightGBM (Top-1 within 0.003) but about 5 times slower to fit (75 s per fold in v2).
 - **B5 Hyperparameters:** 150 trees, max depth 14, min samples per leaf 20, max features sqrt, max_samples 0.5, seed 42. **B6 Objective:** Gini impurity per tree; probabilities from tree voting.
 - **C7 to C8 Student-test:** Top-1 0.8596, Macro F1 0.9157, log loss 0.1065. Close to LightGBM and consistent with CV.
-- **C9 Fit:** train Top-1 0.8622 vs validation 0.8480; train log loss 0.1021 vs 0.1157. Mild overfitting, limited by the depth and leaf-size settings.
+- **C9 Fit:** (v2) train Top-1 0.8631 vs validation 0.8489; train log loss 0.0664 vs 0.0759. Mild overfitting, limited by the depth and leaf-size settings.
 
 **Model 3: LightGBM (untuned)**
 - **A1 Why suitable?** Features interact (a close arc with the wrong heading is wrong); boosted trees learn such rules, need no scaling and are fast on 1.19 million rows.
-- **A2 Strengths / limitations:** Best CV Top-1 and log loss. 9.7 s per fold to fit, 3.77 ms per 1,000 rows to predict. Mild overfitting.
+- **A2 Strengths / limitations:** Best CV Top-1 and log loss. 15.0 s per fold to fit, 3.56 ms per 1,000 rows to predict (v2). Mild overfitting.
 - **B5 Hyperparameters:** 400 trees, lr 0.05, 31 leaves, min child samples 50, subsample 0.8, colsample 0.8, reg_lambda 1.0, seed 42. **B6 Objective:** binary log loss via gradient boosting.
 - **C7 to C8 Student-test:** Top-1 0.8634, Macro F1 0.9167, log loss 0.1020, the best of all six runs on all three metrics. Consistent with its CV ranking, and train-validation gap in CV suggested only mild overfitting.
-- **C9 Fit:** train Top-1 0.8788 vs validation 0.8505; train log loss 0.0913 vs 0.1121 (mild overfit). Loss curve (CV fold 0 only, `plots/loss_curve_lightgbm.png`): validation loss flattens near 0.155 from about iteration 150 while training loss keeps falling to about 0.083.
+- **C9 Fit:** (v2) train Top-1 0.8799 vs validation 0.8520; train log loss 0.0596 vs 0.0736 (mild overfit). Loss curve (v2, CV fold 0 only, `plots/loss_curve_lightgbm.png`, viewed): validation log loss drops fast over about the first 60 iterations and is flat at about 0.10 from roughly iteration 150, while training log loss keeps falling to about 0.055. The widening gap is the mild overfit; trees beyond about 150 add almost nothing on validation.
 
 **Model 4: MLP (neural network)**
 - **A1 Why suitable?** A neural-network family member that can learn non-linear combinations of the 13 features and has a real epoch history.
-- **A2 Strengths / limitations:** Competitive (Top-1 0.8451) and fast at prediction (0.32 ms per 1,000 rows), but not better than boosting on tabular features. Trained on a fixed 100,000-point subsample per fit for compute reasons (validation folds are never subsampled).
+- **A2 Strengths / limitations:** Competitive (Top-1 0.8459 in v2) and fast at prediction (0.39 ms per 1,000 rows), but not better than boosting on tabular features. Trained on a fixed 100,000-point subsample per fit for compute reasons (validation folds are never subsampled).
 - **B5 Hyperparameters:** hidden layers (64, 32), alpha (L2) 1e-4, constant learning rate, early stopping, seed 42. **B6 Objective:** log loss (cross-entropy), optimised by gradient descent.
 - **C7 to C8 Student-test:** Top-1 0.8558, Macro F1 0.9129, log loss 0.1079. Close to Random Forest.
-- **C9 Fit:** train Top-1 0.8563 vs validation 0.8451; train log loss 0.1082 vs 0.1190. Small gap, mild overfit. Loss curve: `plots/loss_curve_mlp.png` (CV fold 0). Training loss drops quickly in the first 2 epochs then flattens at about 0.10 over about 27 epochs. The orange line in that plot is the MLP's validation **score** (an accuracy-type value near 0.95), not a loss, so it must not be read as a loss curve. (The lead reports the plot was redrawn from a real re-run with validation accuracy on its own right-hand axis and identical CV numbers; confirm by viewing the final PNG.)
+- **C9 Fit:** (v2) train Top-1 0.8564 vs validation 0.8459; train log loss 0.0712 vs 0.0790. Small gap, mild overfit. Loss curve: `plots/loss_curve_mlp.png` (CV fold 0). `[[TODO: the next sentences were written from the v1 plot; re-view the v2 PNG and correct them]]` Training loss drops quickly in the first 2 epochs then flattens at about 0.10 over about 27 epochs. The orange line in that plot is the MLP's validation **score** (an accuracy-type value near 0.95), not a loss, so it must not be read as a loss curve. (The lead reports the plot was redrawn from a real re-run with validation accuracy on its own right-hand axis and identical CV numbers; confirm by viewing the final PNG.)
 
 **Model 5: KNN (distance-weighted)**
 - **A1 Why suitable?** An instance-based method with no training assumptions; included as a different family for comparison.
-- **A2 Strengths / limitations:** Cheapest to fit (0.4 s) but the slowest to predict (312.8 ms per 1,000 rows) and its probabilities are poorly calibrated, which makes it a weak HMM emission. Trained on a fixed 40,000-point subsample per fit.
+- **A2 Strengths / limitations (this row is still the v1, K=8 run):** Cheapest to fit (0.4 s) but the slowest to predict (312.8 ms per 1,000 rows) and its probabilities are poorly calibrated, which makes it a weak HMM emission. Trained on a fixed 40,000-point subsample per fit.
 - **B5 Hyperparameters:** 25 neighbours, distance weighting, standardised inputs. **B6 Objective:** none (no training loss); it votes among neighbours.
 - **C7 to C8 Student-test:** Top-1 0.8460, Macro F1 0.9073, log loss 0.2284. Log loss is by far the worst, matching the overconfident memorising behaviour seen in CV.
 - **C9 Fit:** strong overfitting: train Top-1 0.9908 and train log loss 0.0000 (each training point is its own nearest neighbour) against validation Top-1 0.8379 and log loss 0.2536, the worst of all models.
@@ -266,7 +275,20 @@ where "good" is most likely, so it needs far fewer trials than a grid search.
 | Untuned | 0.9105 | 0.8505 | 0.1121 | 0.8788 | 0.9287 | 0.8634 | 0.9167 | 3.77 ms CV, 4.19 ms student-test run |
 | Tuned | 0.9111 | 0.8510 | 0.1116 | 0.8762 | 0.9282 | 0.8630 | 0.9164 | 5.33 ms CV, 5.71 ms student-test run (`cv_folds_tuned.csv`, `final_student_test.csv`) |
 
-**Plain reading:** tuning improved CV Top-1 by only +0.0005, far inside the fold spread (about
+(Table above is v1, K=8. All Optuna trials were run on the v1 data. For v2 the team reused those best
+parameters on the K=16 data (`bayes_opt.py --reuse-best`) and did not run a new 40-trial search;
+`[[TODO: confirm in scripts/bayes_opt.py and results/models/EXPERIMENTS.md]]`.) v2 untuned vs tuned,
+same 5 folds, K=16 data (`tuned_vs_untuned.csv`):
+
+| v2 | CV Macro F1 | CV Top-1 | CV log loss | Train Top-1 | Route continuity (OOF) |
+|---|---|---|---|---|---|
+| Untuned | 0.9157 | 0.852 | 0.0736 | 0.8799 | 0.9297 |
+| Tuned (reused params) | 0.9161 | 0.852 | 0.0733 | 0.8770 | 0.9295 |
+
+In v2 the two are identical on CV Top-1 to three decimals and differ by 0.0004 on Macro F1 and 0.0003
+on log loss: again no meaningful gain from tuning.
+
+**Plain reading:** tuning improved CV Top-1 (v1) by only +0.0005, far inside the fold spread (about
 0.055), so it is not a meaningful gain. Most trials landed near 0.849, which suggests the default
 LightGBM was already near the plateau for these 13 features. The visible benefit is a slightly
 smaller train-validation gap (train Top-1 0.8788 to 0.8762). Bigger improvements are more likely to
@@ -281,69 +303,85 @@ Plain-language idea: the classifier judges each GPS point alone and can jump bet
 pick the wrong direction of a two-way road. A real vehicle cannot teleport, so we look for the
 single best *whole* chain of arcs. Viterbi is the dynamic-programming method that finds that
 chain efficiently instead of trying every combination. Code: `pathsnap/hmm.py`,
-`pathsnap/pipeline.py`, `scripts/hmm_eval.py`. Details also in `report/hmm_and_data_pipeline.md`.
-All numbers: `results/pipeline/hmm_comparison.csv`, `hmm_params.json`, `hmm_grid.csv`,
-`hmm_per_trip_*.csv`.
+`pathsnap/pipeline.py`, `scripts/hmm_eval.py`. Sources: `results/pipeline/hmm_comparison.csv` (v2),
+`hmm_params.json`, `hmm_grid.csv`, `hmm_per_trip_*.csv`, `hmm_error_breakdown.csv`, `EXPERIMENTS.md`
+entries E2 to E5; v1 copies in `results/pipeline/v1_k8/`.
 
-1. **Hidden states:** for each GPS point, one of its (up to 8) candidate arcs.
+1. **Hidden states:** for each GPS point, one of its candidate arcs (up to 16 in v2, up to 8 in v1).
 2. **Emission:** log of the classifier probability that the candidate is correct, multiplied by an
    emission weight. The no-ML baseline uses a Gaussian on the point-to-arc distance (sigma 10 m).
    Probabilities are clipped to at least 1e-6 so the log is finite.
 3. **Transition:** from candidate a at one point to candidate b at the next, score
-   exp(-|road distance - GPS distance| / beta). Road distance is the shortest path on the arc
-   graph (bounded Dijkstra search) between the projections of the two points. A car moves about as
-   far on the road as the GPS says it moved, so large disagreement is penalised.
-4. **Gaps and missing candidates:** the trip is cut wherever the time gap is over 60 s and each
-   piece is decoded separately (no linking across a gap). Points with no candidate get no arc
-   (-1). Network search is bounded, so far-apart points do not trigger a huge search.
+   exp(-|road distance - GPS distance| / beta). Road distance is the shortest path on the arc graph
+   (bounded Dijkstra search) between the projections of the two points. A car moves about as far on
+   the road as the GPS says it moved, so large disagreement is penalised.
+   **v2 addition:** switching to the reverse-direction twin of the current arc costs an extra fixed
+   penalty (`uturn`, 100 in log units), because turning round on a two-way road mid-trip is rare.
+4. **Gaps and missing candidates:** features keep the split at time gaps over 60 s, but **v2 bridges
+   them in the HMM** (`hmm.bridge_segments`): if the last point before a gap and the first point after
+   are at most 5,000 m apart, Viterbi continues across the gap instead of restarting with no memory.
+   Why: after a restart a point on a two-way road picks a direction at random (found on train trip 84,
+   runs of 100 to 250 wrong points, per the docstring). If the points are farther apart, the pieces
+   are decoded separately. Points with no candidate get no arc (-1). v1 restarted at every gap.
 5. **Disconnected consecutive observations:** if b cannot be reached from a, the transition gets a
-   fixed penalty (the "floor", in log units), never zero probability, so one bad point cannot kill
-   the whole path. Viterbi runs in log space to avoid underflow.
-6. **Tuned values** (4 parameters, chosen on train out-of-fold probabilities, GroupKFold by trip;
-   120 grid trials per method in `hmm_grid.csv`): classifier+HMM uses beta 10, floor 25, emission
-   weight 0.1; distance+HMM uses beta 50, floor 50, emission weight 0.25 (`hmm_params.json`).
-   Caveat: these were tuned and scored on the same 80 train trips, so the HMM numbers are slightly
-   optimistic. The top few grid settings are within about 0.001 Top-1 of each other, so the result
-   is not sensitive to the exact values. The one-time student_test run is the independent check (results below).
+   fixed penalty (the "floor", log units), never zero probability, so one bad point cannot kill the
+   whole path. Viterbi runs in log space to avoid underflow.
+6. **Tuned values** (chosen on train out-of-fold probabilities, GroupKFold by trip, grid in
+   `hmm_grid.csv`; `hmm_params.json`): v2 classifier + HMM uses beta 10, floor 50, emission weight 0.1,
+   U-turn 100; v2 distance-only HMM uses beta 5, floor 25, weight 1.0. v1 used beta 10, floor 25,
+   weight 0.1 (classifier) and beta 50, floor 50, weight 0.25 (distance).
+   **Caveat to state in the report:** the parameters were chosen on the same out-of-fold points they
+   are scored on, so the train numbers are optimistic. The lead thread's held-out check (choose
+   parameters on half the trips, score the other half) gives 0.948 to 0.951 Top-1, so v2 is at about
+   0.95, not clearly above it. `[[TODO: cite the file that holds this held-out check; it was given in a
+   message and is described in E5 as thread E's check, I have not seen the file]]`
 
-**Did HMM decoding improve the final route?** The classifier here is the tuned LightGBM (the final
-model). Train = 80 trips, 185,107 labelled points, out-of-fold probabilities
-(`results/pipeline/hmm_comparison.csv`). Student-test = 10 trips, 19,132 labelled points, scored once
-(`results/pipeline/hmm_comparison_student_test.csv`). Pooled over points.
+**What drove the v2 changes (honest history).** After the v1 student_test run the team set a goal of at
+least 95% Top-1. That threshold is our own; it is not in the five official PDFs. v1 error analysis on
+train (E4, `hmm_error_breakdown.csv`, 185,107 labelled points, classifier + HMM 93.88% right): wrong
+points were 0.92% reference arc not among the candidates, 1.92% reverse-direction twin, 2.18%
+adjacent arc (junction boundary), 1.11% other. Twin errors concentrate at low speed, where GPS
+heading is noise. E4 also records two things tried and not adopted: a direction-aware same-arc
+transition (lowered Top-1 to 0.8845 to 0.9319, because 15% of consecutive points on the true arc move
+"backwards" by more than 2 m from noise) and a mixed classifier + distance emission (+0.15 points,
+too small to adopt). v2 then raised K to 16, bridged gaps and added the U-turn penalty (E5). All of
+these were chosen using train data only; student_test was not used for any v2 choice. **However,
+because the goal was set after seeing the v1 student_test number, a v2 student_test run would no
+longer be a fully untouched check; say so if one is reported.**
 
-| Method | Train Top-1 | Train continuity | Student-test Top-1 | Student-test continuity |
+**Did HMM decoding improve the final route?** Pooled over points, tuned LightGBM probabilities.
+Train = 80 trips, 185,107 labelled points, out-of-fold. Student-test = 10 trips, 19,132 labelled
+points, **v1 only (K=8, one-time run, `hmm_comparison_student_test.csv`); a v2 student_test run is
+pending the team's approval, so the v2 student-test cells are not available.**
+
+| Method | Train v1 Top-1 / continuity | Train v2 Top-1 / continuity | Student-test v1 Top-1 / continuity | Student-test v2 |
 |---|---|---|---|---|
-| Nearest arc (distance only) | 0.5536 | 0.8243 | 0.5351 | 0.8209 |
-| Distance emission + HMM (no ML) | 0.9289 | 0.9813 | 0.9368 | 0.9809 |
-| Classifier only (tuned LightGBM) | 0.8508 | 0.9441 | 0.8630 | 0.9431 |
-| Classifier + HMM | 0.9388 | 0.9809 | 0.9214 | 0.9818 |
+| Nearest arc (distance only) | 0.5536 / 0.8243 | 0.5536 / 0.8243 | 0.5351 / 0.8209 | `[[pending v2 run]]` |
+| Distance emission + HMM (no ML) | 0.9289 / 0.9813 | 0.9422 / 0.9802 | 0.9368 / 0.9809 | `[[pending v2 run]]` |
+| Classifier only (tuned LightGBM) | 0.8508 / 0.9441 | 0.8504 / 0.9444 | 0.8630 / 0.9431 | `[[pending v2 run]]` |
+| Classifier + HMM | 0.9388 / 0.9809 | **0.9510 / 0.9806** | 0.9214 / 0.9818 | `[[pending v2 run]]` |
 
 What this shows, stated honestly:
-- **Most of the gain comes from the HMM, not the classifier.** On student-test the HMM lifts the
-  classifier from 0.863 to 0.921 Top-1 (+5.8 points) and continuity from 0.943 to 0.982. On train
-  the lift is 0.851 to 0.939 (+8.8 points). A distance-only HMM with no machine learning at all
-  reaches 0.937 Top-1 and 0.981 continuity on student-test.
-- **On student-test the distance-only HMM beat classifier + HMM by 1.5 points of Top-1 (0.9368 vs
-  0.9214).** This reverses the train ordering, where classifier + HMM led by about 1 point (0.9388 vs
-  0.9289). Continuity is essentially tied (0.9818 vs 0.9809). We did not change anything because of
-  this (student_test must not drive a choice), so the submitted system still uses the classifier
-  emission. What we can and cannot say: with only 10 student_test trips and a large trip-to-trip
-  spread, a 1.5 point difference may be noise, but it does mean we **cannot claim the classifier
-  improves the final route once the HMM is applied**. The HMM's tuned emission weight on the
-  classifier is small (0.1) and the classifier's advantage over the distance model was only about 1
-  point on train, so a reversal on a different set of trips is plausible. We have not diagnosed why;
-  `[[TODO: per-trip student_test files do not exist, so this cannot be broken down yet; do not
-  guess a cause]]`.
-- **Where the classifier alone is good:** it is clearly better than the nearest-arc baseline (0.863
-  vs 0.535 on student-test), which is mostly the heading features separating the two directions of a
-  two-way road. The final route quality, however, is driven mainly by the transition model.
-- **Train, per trip (80 trips, tuned OOF, `hmm_per_trip_*.csv`):** classifier + HMM beats
-  classifier-only on 78 trips and is worse on 2: trip 63 (0.845 to 0.827) and trip 39 (0.959 to
-  0.953). Median gain per trip is about 4.8 points. Biggest gains: trip 2 (0.587 to 0.888), trip 8
-  (0.601 to 0.859), trip 33 (0.483 to 0.724), trip 21 (0.782 to 0.994). Classifier + HMM beats
-  distance + HMM on 63 trips and is worse on 16. On trip 63 the distance-only HMM is better (0.954).
-  The cause for trips 63 and 33 (still only 0.724) is not yet known; `[[TODO: view
-  results/maps/trip_00000063.html and state a cause only after looking]]`.
+- **Most of the gain comes from the HMM, not the classifier.** In v2 the HMM lifts the classifier from
+  0.850 to 0.951 Top-1 on train (+10.1 points) and continuity from 0.944 to 0.981. A distance-only
+  HMM with no machine learning already reaches 0.942 Top-1 and 0.980 continuity on train.
+- **The classifier adds about 0.9 points on top of a distance-only HMM on train in v2** (0.9510 vs
+  0.9422; v1 was about 1 point, 0.9388 vs 0.9289). Continuity is essentially tied (0.9806 vs 0.9802).
+- **On v1 student-test the distance-only HMM beat classifier + HMM by 1.5 points** (0.9368 vs 0.9214),
+  the reverse of the train ordering. We changed nothing in response to that number, and we have not
+  diagnosed the reversal. With only 10 trips it may be noise, but we cannot claim the classifier
+  improves the final route once the HMM is applied. Whether the reversal remains in v2 is unknown
+  until a v2 student_test run. `[[TODO: per-trip student_test files do not exist, so no breakdown]]`
+- **v2 reaches 0.951 on train, but that is an optimistic in-sample selection:** held-out estimate
+  0.948 to 0.951. We should not describe v2 as "above 95%" with confidence.
+- **Per trip, v2, train (80 trips):** classifier + HMM beats classifier-only on 79 trips and is worse
+  on 1 (trip 57: 0.901 to 0.866). Median gain per trip about 5.8 points. Biggest gains: trip 2
+  (0.588 to 0.916), trip 16 (0.596 to 0.897), trip 8 (0.599 to 0.885), trip 10 (0.652 to 0.871).
+  Classifier + HMM beats distance + HMM on 68 trips and is worse on 10. The weakest trip is trip 33
+  (0.469). Causes for trips 57 and 33 are not known; `[[TODO: view the maps for trips 57 and 33 and
+  state a cause only after looking]]`.
+- Remaining ceiling: the candidate miss rate falls from 0.92% (K=8) to 0.48% (K=16), but junction-
+  boundary and slow-speed twin-road errors remain the largest error types (v1 breakdown above).
 - Unlabelled points (about 11% of kept points on train, section 2.2.2) are not scored.
 
 Folium map showing classifier-only vs classifier+HMM on one trip: `[[TODO: results/maps/trip_<id>.html
