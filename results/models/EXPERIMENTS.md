@@ -35,3 +35,22 @@ All development runs use train only (GroupKFold(5) by trip_id, SEED=42). student
 
 - Reading: KNN memorises its training subsample (train Top-1 0.991, train log loss 0.0000, train points are their own neighbours) but validates worst on log loss (0.2536): clear overfitting and poorly calibrated probabilities, and slowest at inference (312.8 ms per 1000 rows). RF and MLP sit close to LightGBM (Top-1 within 0.006), all within the ±0.055 fold spread.
 - Model to tune: LightGBM (highest CV Top-1 0.8505, also lowest CV log loss 0.1121).
+
+## M3. Optuna (TPE) tuning of LightGBM + tuned vs untuned
+- Command: `python scripts/bayes_opt.py --trials 40` (model chosen automatically: best CV Top-1, tie-break log loss, from `model_comparison.csv`)
+- Commit: `Add Optuna tuning ...` (see git log), date 2026-11-18, ~20 min on 4 CPU cores
+- Search: TPESampler(seed=42), 40 trials, objective = mean validation Top-1 over GroupKFold(3) by trip_id on all 80 train trips. Search space: n_estimators 100-600, learning_rate 0.01-0.2 (log), num_leaves 8-128 (log), min_child_samples 10-400 (log), subsample 0.5-1, colsample_bytree 0.5-1, reg_lambda 0.001-30 (log).
+- Outputs: `optuna_trials.csv` (all 40 trials: params, 3-fold Top-1, per-fold Top-1, duration), `best_params.json`, `plots/optuna_history.png`, `plots/optuna_param_importance.png`, `tuned_vs_untuned.csv`, `cv_folds_tuned.csv`, `oof_lightgbm_tuned.parquet`, `plots/loss_curve_lightgbm_tuned.png`
+- Result: best trial 33, 3-fold Top-1 0.8496 (trial values: min 0.8336, median 0.8492, max 0.8496). Best params: n_estimators=450, learning_rate=0.0326, num_leaves=50, min_child_samples=121, subsample=0.592, colsample_bytree=0.572, reg_lambda=0.197.
+- Tuned vs untuned (same 5 folds as train_models.py):
+
+| variant | CV Top-1 | CV macro F1 | CV log loss | train Top-1 | OOF route continuity |
+|---|---|---|---|---|---|
+| untuned | 0.8505 ± 0.0551 | 0.9105 | 0.1121 | 0.8788 | 0.9287 |
+| tuned | 0.8510 ± 0.0549 | 0.9111 | 0.1116 | 0.8762 | 0.9282 |
+
+- Reading: tuning gained +0.0005 Top-1 and -0.0005 log loss, far smaller than the fold spread (±0.055), so it is not a meaningful improvement; the untuned defaults were already near a plateau (most trials land at 0.849). The tuned model has a slightly smaller train/validation gap (0.8762 vs 0.8510 against 0.8788 vs 0.8505). Caveat: tuning and this comparison use the same 80 train trips, so the tuned figure is mildly optimistic. student_test untouched.
+
+## M4. Export tuned model bundle
+- Command: `python scripts/export_model.py` -> `artifacts/model.joblib` = tuned LightGBM (best_params.json) refit on all 80 train trips (1,189,495 labelled rows), 1.1 MB. The reload check (probabilities on 20,000 rows, atol 1e-9) passed. `hmm_params` is None because `results/pipeline/hmm_params.json` did not exist at export time; re-run the script once it does.
+- Per-model bundles (`artifacts/models/<name>.joblib`, for the UI picker) were exported by the lead thread with the same script (the Random Forest reload check needs atol, because multi-threaded forests sum trees in a varying order).

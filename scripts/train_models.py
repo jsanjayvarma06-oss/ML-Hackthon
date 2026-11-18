@@ -48,6 +48,7 @@ def labelled(df):
 
 
 def proba(est, X):
+    """P(candidate is the true arc) for each row: predict_proba column 1."""
     return est.predict_proba(X)[:, 1]
 
 
@@ -120,6 +121,12 @@ def subsample_points(df, idx, max_points, seed=SEED):
 
 
 def cross_validate(name, est, df, cols, arcs_cache):
+    """GroupKFold(5) by trip_id for one model.
+
+    Returns (per-fold DataFrame with train and validation metrics, out-of-fold probabilities
+    for every row, summary dict for model_comparison.csv, fold-0 loss history or None).
+    Slow models train on a fixed point subsample (models.TRAIN_SUBSAMPLE); validation is full.
+    """
     rows, oof = [], np.zeros(len(df))
     hist = None
     max_pts = models.TRAIN_SUBSAMPLE.get(name)
@@ -172,6 +179,7 @@ def cross_validate(name, est, df, cols, arcs_cache):
 
 
 def plot_history(name, hist, out):
+    """Save the real per-iteration/epoch loss history (LightGBM eval set, MLP) as a PNG."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -188,6 +196,7 @@ def plot_history(name, hist, out):
 
 
 def bar_plot(df, cols, labels, title, fname, out, err=None):
+    """Grouped bar chart of one or more metric columns per model; optional error bars."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -206,6 +215,7 @@ def bar_plot(df, cols, labels, title, fname, out, err=None):
 
 
 def save_confusion(name, cm, out):
+    """Save a 2x2 confusion matrix image (student_test, --final only)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -224,6 +234,7 @@ def save_confusion(name, cm, out):
 
 
 def upsert(path, new, key="model"):
+    """Write `new` rows into a CSV, replacing existing rows with the same key (re-runs are safe)."""
     old = pd.read_csv(path) if path.exists() else pd.DataFrame()
     if len(old):
         old = old[~old[key].isin(new[key])]
@@ -233,6 +244,7 @@ def upsert(path, new, key="model"):
 
 
 def develop(names, zoo, cols):
+    """Development run: GroupKFold CV on train for each model; writes CSVs, OOF files, plots."""
     train = labelled(pd.read_parquet(PROCESSED_DIR / "train.parquet"))
     print(f"train: {train.trip_id.nunique()} trips, {len(train):,} labelled rows")
     plots = OUT / "plots"
@@ -305,6 +317,7 @@ def final(names, zoo, cols, extra=None):
 
 
 def main(argv=None):
+    """CLI entry point (see module docstring)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", nargs="*", help="subset of model names (default: all)")
     ap.add_argument("--final", action="store_true",
