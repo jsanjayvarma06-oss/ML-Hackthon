@@ -114,7 +114,9 @@ def generate_candidates(trip, k=K_CANDIDATES, radius_m=RADIUS_M, keep_idx=None, 
     # Sample points every SAMPLE_STEP_M along each arc (both ends included).
     n_samp = np.ceil(txy.arc_len[arc_ids] / SAMPLE_STEP_M).astype(int) + 1
     owner = np.repeat(np.arange(len(arc_ids)), n_samp)
-    frac = np.concatenate([np.linspace(0, 1, m) for m in n_samp])
+    # position of each sample along its arc, 0..1 (vectorised np.linspace(0, 1, m) per arc)
+    start = np.repeat(np.cumsum(n_samp) - n_samp, n_samp)
+    frac = (np.arange(n_samp.sum()) - start) / np.maximum(n_samp[owner] - 1, 1)
     sx = s[owner, 0] + frac * (s[owner, 2] - s[owner, 0])
     sy = s[owner, 1] + frac * (s[owner, 3] - s[owner, 1])
     tree = cKDTree(np.column_stack([sx, sy]))
