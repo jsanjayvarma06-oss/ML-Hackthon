@@ -43,3 +43,10 @@ Each entry: command, code commit, date, outputs, headline numbers. Numbers are c
   distance + HMM unchanged 0.9289 / 0.9813. Chosen params unchanged: beta 10, floor 25, emission weight 0.1.
 - Reading: tuning the classifier changed classifier-only Top-1 by +0.0006 and classifier+HMM by −0.0002 (0.9390 in E2), i.e. no measurable difference.
 - Then `python scripts/export_model.py` wrote `artifacts/model.joblib` = lightgbm_tuned with these hmm_params.
+
+## FINAL: one-time student_test HMM evaluation (approved by Wolf)
+- Command: `python scripts/hmm_eval.py --final` at commit c804a3b, model artifacts/model.joblib (lightgbm_tuned), params from hmm_params.json (E3)
+- Output: `hmm_comparison_student_test.csv` (10 trips, 19,132 labelled points)
+- Headline Top-1 / route continuity: distance only 0.5351 / 0.8209; distance + HMM 0.9368 / 0.9809; classifier only 0.8630 / 0.9431; classifier + HMM 0.9214 / 0.9818
+- Reading (honest): on student_test the no-ML decoder (distance + HMM) beats classifier + HMM by 1.5 points, the reverse of train CV (0.9289 vs 0.9388). We do NOT switch models because of this (student_test must not drive choices); the report discusses it as a limitation: the HMM does most of the work, and the classifier's extra signal did not generalise to these 10 trips.
+- Not used for any decision.

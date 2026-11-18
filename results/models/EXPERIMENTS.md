@@ -54,3 +54,10 @@ All development runs use train only (GroupKFold(5) by trip_id, SEED=42). student
 ## M4. Export tuned model bundle
 - Command: `python scripts/export_model.py` -> `artifacts/model.joblib` = tuned LightGBM (best_params.json) refit on all 80 train trips (1,189,495 labelled rows), 1.1 MB. The reload check (probabilities on 20,000 rows, atol 1e-9) passed. `hmm_params` is None because `results/pipeline/hmm_params.json` did not exist at export time; re-run the script once it does.
 - Per-model bundles (`artifacts/models/<name>.joblib`, for the UI picker) were exported by the lead thread with the same script (the Random Forest reload check needs atol, because multi-threaded forests sum trees in a varying order).
+
+## FINAL: one-time student_test evaluation (approved by Wolf, 18 Nov ~13:00 IST)
+- Command: `python scripts/train_models.py --final` at commit c804a3b (all choices frozen on train before this run)
+- Each model refit on all 80 train trips (KNN/MLP on their fixed subsample), scored once on the 10 student_test trips (125,439 labelled candidate rows, 19,132 points)
+- Outputs: `final_student_test.csv`, `plots/confusion_<model>.png`, `plots/student_test_top1_f1.png`, `plots/student_test_log_loss.png`
+- Headline Top-1 / macro F1 / log loss: LightGBM 0.8634 / 0.9167 / 0.1020; LightGBM tuned 0.8630 / 0.9164 / 0.1023; RF 0.8596 / 0.9157 / 0.1065; MLP 0.8558 / 0.9129 / 0.1079; LogReg 0.8466 / 0.8935 / 0.1517; KNN 0.8460 / 0.9073 / 0.2284
+- Not used for any decision.

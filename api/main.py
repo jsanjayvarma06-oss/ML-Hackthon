@@ -138,6 +138,9 @@ def comparison():
         "decoder": _csv_rows(res / "pipeline" / "hmm_comparison.csv", {
             "method": "Method", "top1_pooled": "Top-1", "top1_mean_over_trips": "Top-1 (trip mean)",
             "route_continuity": "Route continuity", "n_trips": "Trips"}),
+        "decoder_student_test": _csv_rows(res / "pipeline" / "hmm_comparison_student_test.csv", {
+            "method": "Method", "top1_pooled": "Top-1", "route_continuity": "Route continuity",
+            "model": "Classifier"}),
         "student_test": _csv_rows(res / "models" / "final_student_test.csv", {
             "model": "Model", "test_top1": "Top-1", "test_f1_macro": "Macro F1",
             "test_log_loss": "Log loss", "test_route_continuity": "Route continuity",

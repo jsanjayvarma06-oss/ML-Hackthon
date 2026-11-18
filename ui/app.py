@@ -137,7 +137,9 @@ def show_comparison(api_url):
     table("tuning", "Untuned vs tuned (Bayesian optimisation)", "CV Top-1")
     table("decoder", "Classifier only vs classifier + HMM (train, out-of-fold)", "Top-1",
           caption="Out-of-fold probabilities: every trip scored by a model that never saw it.")
-    table("student_test", "Student-test (one final run)", "Top-1")
+    table("student_test", "Student-test classifiers (one final run)", "Top-1",
+          caption="10 student_test trips, scored once after every choice was frozen.")
+    table("decoder_student_test", "Student-test: classifier only vs + HMM (one final run)", "Top-1")
 
 
 if page == "Model comparison":

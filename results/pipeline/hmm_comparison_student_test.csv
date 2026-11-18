@@ -1,0 +1,5 @@
+method,top1_pooled,route_continuity,n_labelled,model
+classifier_hmm,0.9214405185030315,0.9818267272442425,19132,lightgbm_tuned
+classifier_only,0.8630043905498641,0.9430779675178861,19132,lightgbm_tuned
+distance_hmm,0.9368074430273887,0.9808867303775655,19132,lightgbm_tuned
+distance_only,0.5350721304620532,0.8209305968980103,19132,lightgbm_tuned
