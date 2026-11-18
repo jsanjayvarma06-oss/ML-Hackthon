@@ -168,8 +168,7 @@ Log loss measures how honest the probabilities are, which matters because the HM
 
 ### 3.1 Overall comparison table
 **Versions.** CV numbers below are v2 (K=16 candidates, 1,862,764 labelled training rows), from
-`results/models/model_comparison.csv`; same 5 GroupKFold folds for every model. Exception: the KNN
-row was not re-run and is still the v1 (K=8) result (1,189,495 rows). The v1 table is kept in
+`results/models/model_comparison.csv`; same 5 GroupKFold folds for every model, all rows v2 (the KNN row was re-run on K=16 after the first v2 table). The v1 table is kept in
 `results/models/v1_k8/`. The Student-test Macro F1 column is from the one-time v1 (K=8) run
 (`results/models/final_student_test.csv`, each model refit on all 80 train trips, scored once on 10
 student_test trips, 19,132 labelled points). A v2 student_test run has not been done. Top-1 is mean
@@ -182,7 +181,7 @@ over folds ± standard deviation. Route continuity is on out-of-fold classifier-
 | 2 Random Forest | bagging ensemble | 150 trees, max depth 14, min leaf 20, max features sqrt | 0.9140 | 0.8489 ± 0.0577 | 0.9226 | 0.9157 | 0.0759 | 2.04 ms |
 | 3 LightGBM | boosting | 400 trees, lr 0.05, 31 leaves, min child 50 | 0.9157 | 0.8520 ± 0.0580 | 0.9297 | 0.9167 | 0.0736 | 3.56 ms |
 | 4 MLP | neural network | hidden (64, 32), alpha 1e-4, trained on 100,000 points per fit | 0.9112 | 0.8459 ± 0.0558 | 0.9282 | 0.9129 | 0.0790 | 0.39 ms |
-| 5 KNN (distance-weighted), v1 K=8 row | instance-based | 25 neighbours, trained on 40,000 points per fit | 0.9021 | 0.8379 ± 0.0549 | 0.9191 | 0.9073 | 0.2536 | 312.8 ms |
+| 5 KNN (distance-weighted) | instance-based | 25 neighbours, distance weighted, 40,000-point subsample per fit | 0.9042 | 0.8371 ± 0.0544 | 0.9231 | 0.9073 | 0.1762 | 472.3 ms |
 | Baseline: nearest arc | none | K=1 | N/A, not a probabilistic classifier | about 0.554 train (student-test 0.5351) | 0.8243 train (student-test 0.8209) | N/A | N/A | N/A |
 
 **Student-test results, v1 (partition: student_test, 10 trips; `results/models/final_student_test.csv`).**
@@ -244,10 +243,10 @@ mean train vs validation over the 5 folds (`cv_folds.csv`).
 
 **Model 5: KNN (distance-weighted)**
 - **A1 Why suitable?** An instance-based method with no training assumptions; included as a different family for comparison.
-- **A2 Strengths / limitations (this row is still the v1, K=8 run):** Cheapest to fit (0.4 s) but the slowest to predict (312.8 ms per 1,000 rows) and its probabilities are poorly calibrated, which makes it a weak HMM emission. Trained on a fixed 40,000-point subsample per fit.
+- **A2 Strengths / limitations:** Cheapest to fit (0.8 s per fold in v2) but the slowest to predict (472.3 ms per 1,000 rows in v2; 332.7 ms in the v1 student-test run) and its probabilities are poorly calibrated, which makes it a weak HMM emission. Trained on a fixed 40,000-point subsample per fit.
 - **B5 Hyperparameters:** 25 neighbours, distance weighting, standardised inputs. **B6 Objective:** none (no training loss); it votes among neighbours.
 - **C7 to C8 Student-test:** Top-1 0.8460, Macro F1 0.9073, log loss 0.2284. Log loss is by far the worst, matching the overconfident memorising behaviour seen in CV.
-- **C9 Fit:** strong overfitting: train Top-1 0.9908 and train log loss 0.0000 (each training point is its own nearest neighbour) against validation Top-1 0.8379 and log loss 0.2536, the worst of all models.
+- **C9 Fit:** strong overfitting (v2): train Top-1 0.9951 and train log loss 0.0000 (each training point is its own nearest neighbour) against validation Top-1 0.8371 and log loss 0.1762, the worst of all models. Same pattern as v1 (0.9908 vs 0.8379, log loss 0.2536).
 
 ### 3.3 Model visualisations (all from real runs)
 - CV Macro F1, all five models: `results/models/plots/cv_f1_macro.png`; CV Top-1: `cv_top1.png`.

@@ -117,13 +117,13 @@ Points in one trip are strongly related; with a random split, neighbours of a va
 Most candidates are wrong (class imbalance), macro F1 weighs both classes equally. Log loss measures probability quality, which the HMM uses as emission.
 
 **5. Report the CV comparison.**
-v2 CV Top-1 (K=16): LightGBM 0.8520, Random Forest 0.8489, MLP 0.8459, LogReg 0.8395; KNN 0.8379 is still the v1 (K=8) row (`model_comparison.csv`; v1 table in `v1_k8/`). Fold standard deviation is about 0.055 to 0.058, much larger than the 0.014 spread between models, so differences of thousandths are not significant.
+v2 CV Top-1 (K=16): LightGBM 0.8520, Random Forest 0.8489, MLP 0.8459, LogReg 0.8395; KNN 0.8371 (all rows are v2 now; v1 table in `v1_k8/`). Fold standard deviation is about 0.055 to 0.058, much larger than the 0.014 spread between models, so differences of thousandths are not significant.
 
-**6. Student-test results?**
+**6. Student-test results? (v1 K=8 run; v2 run pending approval)**
 Top-1 / F1 / log loss: LightGBM 0.8634 / 0.9167 / 0.1020; RF 0.8596 / 0.9157 / 0.1065; MLP 0.8558 / 0.9129 / 0.1079; LogReg 0.8466 / 0.8935 / 0.1517; KNN 0.8460 / 0.9073 / 0.2284 (`final_student_test.csv`). Quote the file if a final re-run changes them (**pending final re-run**).
 
 **7. Why did KNN overfit? (hard)**
-In training each point is its own nearest neighbour: train Top-1 0.991 and train log loss 0.0000 versus validation log loss 0.2536, the worst. It memorises, so its probabilities are overconfident, which is bad for an HMM emission. It is also slow at prediction (312.8 ms per 1,000 rows).
+In training each point is its own nearest neighbour: train Top-1 0.995 and train log loss 0.0000 versus validation Top-1 0.8371 and log loss 0.1762, the worst (v2). It memorises, so its probabilities are overconfident, which is bad for an HMM emission. It is also the slowest at prediction (472 ms per 1,000 rows).
 
 **8. Over/underfitting evidence for LightGBM and LogReg?**
 LightGBM train Top-1 0.879 vs validation 0.851 (mild overfit); LogReg 0.8376 vs 0.8372 (no overfit, but a linear boundary limits it). Evidence is the per-fold train/validation columns in `cv_folds.csv`.
