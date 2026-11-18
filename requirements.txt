@@ -5,6 +5,7 @@ pyarrow
 scipy
 scikit-learn
 lightgbm
+xgboost
 optuna
 pyproj
 networkx
