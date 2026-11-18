@@ -1,6 +1,6 @@
 # PathSnap technical report (team skeleton)
 
-> **Status: skeleton.** Layout follows `Deliverables.pdf` sections 2.2 to 8. Every number is
+> **Status: partly filled (dataset, EDA, preprocessing, models 1 and 3 CV).** Layout follows `Deliverables.pdf` sections 2.2 to 8. Every number is
 > either (a) quoted from a file already in `results/` (the file is named next to it), or
 > (b) a placeholder written as `[[TODO: value <- results/<file>]]`. Nothing here has been
 > measured unless a file is cited. Replace each placeholder only with the real value from
@@ -68,24 +68,56 @@ for every GPS point, which arc the vehicle was on, then join those arcs into a c
    have label coverage below 90% (routes that do not cover the whole track).
 7. **Candidate table.** One row per (GPS point, candidate arc) with a 0/1 label (1 if the arc is
    the aligned reference arc). Built by `python scripts/build_dataset.py`. Dataset size
-   `[[TODO: rows, points, positive rate <- results/pipeline/dataset_summary.csv]]`.
+   Result (`results/pipeline/dataset_summary.csv`, `results/pipeline/EXPERIMENTS.md`, entry E1):
+train has 80 trips, 208,417 GPS points, 208,246 kept after cleaning, 185,107 labelled points and
+1,241,235 candidate rows; 1,189,495 of those rows (labelled points only) are used for training.
+The pooled candidate miss rate is 0.0092 on train. (`EXPERIMENTS.md` also lists 194,674 points that
+have at least one candidate; the rest are removed points or points with no road within 75 m.)
+student_test, only described and never used for a choice: 10 trips, 125,554 rows, 19,132
+labelled points, miss rate 0.0025.
 
 The route file is used only to make labels (and for the API's scoring). It is never a feature.
 
 ### 2.2.3 Missing-value analysis (partition: train)
-`[[TODO: table of missing/non-finite values per file type and per trip <- results/eda/trip_inventory.csv, results/eda/missing_values.csv]]`
-Known data facts to confirm against that table (from the team's check of the raw files, not
-yet our own EDA output): some trips have fractional timestamps, large time gaps, speed spikes
-and some reference routes contain unconnected steps.
+Source: `results/eda/missing_values.csv`, run on all 80 train trips by `scripts/eda.py`.
+
+| Check | Count |
+|---|---|
+| track rows with a non-finite value | 0 |
+| track time steps with dt <= 0 | 0 |
+| route arc ids outside the arcs file | 0 |
+| nodes with a non-finite coordinate | 0 |
+| arcs referencing a missing node | 0 |
+
+So the raw files have no missing values. The data problems are not missing cells but messy
+content, described next. Per-trip details are in `results/eda/trip_inventory.csv`.
 
 ### 2.2.4 What patterns we observed
-`[[TODO: sampling-interval histogram, gaps, speed spikes, network size range, duplicate arcs,
-self-loops, connected components <- results/eda/trip_inventory.csv + plots in results/eda/]]`
+Partition: train, 80 trips. Source: `results/eda/trip_inventory.csv` (summary in
+`results/eda/EXPERIMENTS.md`, Run 1).
+- Size: 208,417 GPS points, median 1,529 per trip (range 361 to 19,313). Road networks range
+  from 649 to 307,392 arcs per trip, which is why candidate search needs a spatial index.
+- Sampling: median time step is 1 s in every trip; 3 trips (2, 71, 97) have fractional timestamps.
+- Gaps: 22 trips have a time step over 60 s (largest 153,064 s in trip 90; 52,810 s in trip 78).
+  This is why we split trips into segments and never link points across a gap.
+- Speed spikes: 10 trips have implied speeds above 70 m/s (max 180.4 m/s). These are GPS errors
+  and motivate the speed filter in cleaning.
+- Network quirks: 53 trips have duplicate arcs, 8 have self-loops, and the median trip has 20
+  weakly connected components (only 1 trip is a single component). So the network is not one
+  connected graph and the matcher must tolerate unreachable arcs.
+- Reference routes: 10 trips have unconnected steps in the route (at most 3 per trip), so labels
+  made from them can be slightly wrong; see label coverage in section 2.2.2.
+What this told us to do: convert to metres, clean spikes and bad times, split at gaps, merge
+duplicate arcs, use a KD-tree, and use heading as a feature to separate two-way roads.
 
 ### 2.2.5 Visualisations (partition for each must be stated in the caption)
-- GPS trajectory plots `[[TODO: results/eda/*.png]]`
-- Road-network visualisation `[[TODO: results/eda/*.png]]`
-- Folium map of a chosen trip `[[TODO: results/maps/eda_<trip>.html + screenshot]]`
+All from the train partition (80 trips), made by `scripts/eda.py`.
+- Sampling-interval histogram: `results/eda/sampling_hist.png`
+- GPS trajectory plots: `results/eda/trajectories.png`
+- Network-size plot (arcs per trip): `results/eda/network_size.png`
+- Folium maps (GPS, nearby roads, reference route): `results/maps/eda_00000005.html`,
+  `eda_00000013.html`, `eda_00000078.html`. `[[TODO: insert a screenshot of one of these]]`
+Check each plot's real caption and axes before inserting; I have not viewed the images.
 
 ### 2.2.6 Feature engineering: what we extracted and why
 All features are computed per (GPS point, candidate arc) from the track and the road network
@@ -110,8 +142,9 @@ table and the live table inside the API, so training and serving see identical f
 **How the features were selected.** The 13 features were designed from the geometry of the
 problem (what distinguishes a right candidate from a wrong one), not picked by looking at test
 results. Whether any feature was later dropped or added based on evidence is a separate claim:
-`[[TODO: feature-importance / ablation result (CV on train only) <- results/models/feature_importance.csv, results/models/ablation.csv]]`.
-If no ablation was run, write exactly that: "features were chosen by reasoning, no ablation run".
+No feature-importance or ablation file exists yet in `results/models/`, so as of now the
+honest statement is: "features were chosen by reasoning, no ablation was run". If an ablation is
+run later (CV on train only), replace this sentence with its result and file name.
 Not used as features, by rule: the route, `true_arc`, `label`, anything from student_test or
 evaluator trips.
 
@@ -128,13 +161,17 @@ which is imbalanced (most candidates are wrong), so it averages the F1 of both c
 Log loss measures how honest the probabilities are, which matters because the HMM uses them.
 
 ### 3.1 Overall comparison table
-Source for every cell: `results/models/model_comparison.csv`.
+Source for every cell: `results/models/model_comparison.csv`. Rows 1 and 3 are filled from
+5-fold GroupKFold CV on train (untuned defaults, milestone 1). The "Top-1" and "Log loss" cells
+are CV values until the one-time student_test run is done; the Student-test Macro F1 column and
+rows 2, 4, 5 stay as placeholders. Route continuity here is computed on out-of-fold
+classifier-only predictions (no HMM). Inference time is measured per 1,000 candidate rows.
 
 | Model | Algorithm family | Key configuration | CV Macro F1 | Top-1 accuracy | Route continuity | Student-test Macro F1 | Log loss | Inference time |
 |---|---|---|---|---|---|---|---|---|
-| 1 Logistic Regression | linear | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` |
+| 1 Logistic Regression | linear / probabilistic | C=1.0, no class weight, standardised inputs | 0.8856 ± 0.0311 | 0.8372 ± 0.0569 (CV) | 0.9094 (out-of-fold) | `[[TODO: student_test, --final]]` | 0.1622 (CV) | 0.15 ms per 1,000 rows |
 | 2 Random Forest | bagged trees | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` |
-| 3 LightGBM | boosted trees | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` |
+| 3 LightGBM (untuned) | boosted trees | 400 trees, learning rate 0.05, 31 leaves, min child samples 50, subsample 0.8, colsample 0.8 | 0.9105 ± 0.0324 | 0.8505 ± 0.0551 (CV) | 0.9287 (out-of-fold) | `[[TODO: student_test, --final]]` | 0.1121 (CV) | 3.77 ms per 1,000 rows |
 | 4 MLP | neural network | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` |
 | 5 KNN (distance-weighted) | instance-based | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` |
 
@@ -147,6 +184,8 @@ statement (which model, and why, in terms of CV on train, not student_test):
 ### 3.2 Per-model subsections (repeat the block below for models 1 to 5)
 Answer from the team's own experiments, not textbook text. Source folder: `results/models/`.
 
+**Template (used for models 2, 4 and 5 until their results exist). Models 1 and 3 follow below.**
+
 **Model N: `[[name]]`**
 - **A1 Why suitable for PathSnap?** `[[TODO, in own words, tied to the 13 features]]`
 - **A2 Strengths and limitations here:** `[[TODO, tied to observed results]]`
@@ -156,14 +195,37 @@ Answer from the team's own experiments, not textbook text. Source folder: `resul
 - **C8 Observation-level Top-1, Macro F1, Log loss on student_test:** `[[TODO]]`
 - **C9 Over/underfitting and the evidence:** `[[TODO: train score vs CV score gap, learning curve or loss curve <- results/models/]]`
 
+**Model 1: Logistic Regression** (`pathsnap/models.py`, results `results/models/model_comparison.csv`, `cv_folds.csv`)
+- **A1 Why suitable?** It is the simplest model that outputs a probability for "is this candidate the true arc?", so it is a fair baseline and its probabilities work as HMM emissions. Inputs are standardised first because features have different units (metres, degrees, 0 to 1).
+- **A2 Strengths and limitations (from our runs):** It is fast (about 1.7 s per fold to fit) and train and validation scores are almost the same, so it is stable. But it can only draw a linear boundary, so it cannot express rules like "close AND heading matches", and it trails LightGBM on every metric in every fold (see below).
+- **B5 Hyperparameters:** C=1.0 (inverse regularisation strength), class_weight=None, solver lbfgs, max_iter 1000, seed 42. No tuning done yet.
+- **B6 Objective:** log loss (cross-entropy) with L2 regularisation.
+- **C7 to C8 Student-test results:** `[[TODO: Top-1, Macro F1, log loss on student_test <- results/models/final_student_test.csv, produced once at the end]]`
+- **C9 Over/underfitting evidence** (`cv_folds.csv`, mean over 5 folds): train Top-1 0.8376 vs validation 0.8372; train Macro F1 0.8869 vs validation 0.8856; train log loss 0.1596 vs validation 0.1622. The train and validation values are almost identical, so there is no overfitting. Scores are not high either, and the model is beaten by LightGBM, which suggests it is limited by its linear form (mild underfitting). The large spread across folds (validation Top-1 from 0.771 in fold 0 to 0.912 in fold 2) shows that results depend on which trips are held out, not on overfitting.
+
+**Model 3: LightGBM, untuned** (same files)
+- **A1 Why suitable?** The tabular features interact (a close arc with the wrong heading is wrong; a farther arc with the right heading and continuity may be right). Boosted trees learn such rules automatically, need no scaling and train quickly on 1.19 million rows.
+- **A2 Strengths and limitations (from our runs):** Best CV scores so far on all metrics. Costs more: about 9.7 s per fold to fit and 3.77 ms per 1,000 rows to predict (25 times slower than Logistic Regression, still small). It overfits somewhat (below).
+- **B5 Hyperparameters and initial values:** n_estimators 400, learning_rate 0.05, num_leaves 31, min_child_samples 50, subsample 0.8, colsample_bytree 0.8, reg_lambda 1.0, seed 42. Tuning: see section 4.
+- **B6 Objective:** binary log loss, optimised by gradient boosting.
+- **C7 to C8 Student-test results:** `[[TODO <- results/models/final_student_test.csv]]`
+- **C9 Over/underfitting evidence** (`cv_folds.csv`, mean over 5 folds): train Top-1 0.8788 vs validation 0.8505; train Macro F1 0.9281 vs validation 0.9105; train log loss 0.0913 vs validation 0.1121. Training is clearly better than validation on all three, so there is a mild overfit. The per-iteration validation loss curve is `results/models/plots/loss_curve_lightgbm.png`: `[[TODO: after viewing the plot, state whether validation loss flattens or rises after some iteration]]`.
+
+**Comparison of models 1 and 3 on CV (`results/models/model_comparison.csv`, `cv_folds.csv`):**
+LightGBM beats Logistic Regression in all five folds on both Top-1 and Macro F1. Mean CV Top-1 is
+0.8505 vs 0.8372, a gap of about 0.013, which is much smaller than the spread between folds
+(standard deviation about 0.055). Because folds are different trips, compare per fold, not just
+means; the per-fold ordering is consistent but the gap in absolute terms is modest. Both are
+well above the nearest-arc baseline of about 0.554 Top-1 (1 minus the K=1 miss rate of 0.446).
+
 ### 3.3 Model visualisations (each must come from a real run)
-- CV Macro F1, all models `[[TODO: results/models/plots/]]`
+- CV Macro F1: `results/models/plots/cv_f1_macro.png` (also `cv_top1.png`). Currently models 1 and 3 only; regenerate when all five are done.
 - Student-test Top-1 and Macro F1 `[[TODO]]`
-- Log loss comparison `[[TODO]]`
+- Log loss comparison: `results/models/plots/cv_log_loss.png` (CV values for now).
 - Confusion matrices (optional) `[[TODO]]`
 - Training/validation loss curves: **only** MLP and boosting with an evaluation set. Do not
   draw curves for Logistic Regression (if solved in closed form/iterations without epoch
-  history), Random Forest or KNN. `[[TODO: results/models/plots/loss_*.png]]`
+  history), Random Forest or KNN. LightGBM: `results/models/plots/loss_curve_lightgbm.png` (exists). MLP: `[[TODO]]`.
 
 ---
 
