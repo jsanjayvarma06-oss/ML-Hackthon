@@ -8,9 +8,11 @@ Transition = how plausible it is to drive from candidate a (at point i) to candi
              says it moved, so we score exp(-|network distance - GPS distance| / beta).
              Network distance comes from a bounded Dijkstra search on the arc graph.
              Unreachable pairs get a fixed low score (a floor), never -inf, so one bad
-             point cannot kill the whole path.
+             point cannot kill the whole path. Switching to the reverse twin of the
+             current arc costs an extra `uturn` nats.
 Everything is in log space. The trip is decoded separately for every segment (a time gap
-longer than 60 s starts a new segment, see candidates.clean_track).
+longer than 60 s starts a new segment, see candidates.clean_track), but segments whose
+end points are close together are bridged again, see `bridge_segments`.
 
 The expensive part (network distances) does not depend on the tunable parameters, so it is
 computed once by `network_distances` and reused by `decode` for every parameter setting.
@@ -26,10 +28,14 @@ DEFAULT_PARAMS = {
     "emission_weight": 1.0,  # multiplies the emission log-probability
     "dist_weight": 0.0,   # v2: adds dist_weight * Gaussian(distance) to the classifier emission
     "prob_eps": 1e-6,     # classifier probabilities are clipped to [eps, 1] before the log
+    "uturn": 100.0,       # nats; extra cost of switching to the reverse twin of the current arc
 }
 # Search radius for the network distance: twice the GPS distance plus slack, capped.
 SEARCH_SLACK_M = 200.0
 SEARCH_CAP_M = 5000.0
+# Segments split at a time gap are joined again when the two GPS points are at most this far
+# apart: a parked car that reports again after a pause is still on the same road.
+BRIDGE_MAX_M = SEARCH_CAP_M
 
 
 def merge_params(params=None):
@@ -113,6 +119,27 @@ def bounded_dijkstra(adj, source, limit):
     return dist
 
 
+def bridge_segments(keep_idx, segment_id, track_xy, max_gap_m=BRIDGE_MAX_M):
+    """Merge segments that were split at a time gap when the car cannot have gone far.
+
+    clean_track starts a new segment after a gap > 60 s. Features keep that split, but the HMM
+    should not: a parked car with a 70 s gap in its fixes would otherwise restart Viterbi with
+    no memory, and on a two-way road the first point then picks a direction at random (found on
+    train trip 84: runs of 100-250 wrong points). We link the last point before the gap to the
+    first point after it unless they are more than `max_gap_m` apart (then no path can be
+    scored anyway). Returns a new segment_id array (same length).
+    """
+    seg = np.asarray(segment_id)
+    out = seg.copy()
+    pts = track_xy[keep_idx]
+    cur = 0
+    for i in range(1, len(seg)):
+        if seg[i] != seg[i - 1] and np.hypot(*(pts[i] - pts[i - 1])) > max_gap_m:
+            cur += 1
+        out[i] = cur
+    return out
+
+
 def _steps(cand_arcs, keep_idx, segment_id):
     """List of (row_prev, row_next) pairs of consecutive kept points that both have
     candidates and lie in the same segment. Points without candidates are skipped over."""
@@ -132,9 +159,10 @@ def network_distances(cand_arcs, trip, txy, keep_idx, segment_id):
     Why: this is the slow part of the HMM and does not depend on beta/floor/sigma, so it is
     computed once per trip and reused by `decode` for any parameter setting.
 
-    Returns a dict {row_next: (row_prev, d_net, d_gps)} where d_net is a
-    (K_prev, K_next) matrix (np.inf = unreachable within the search radius) and d_gps is
-    the straight-line distance in metres between the two GPS points. A pair of arcs is
+    Returns a dict {row_next: (row_prev, d_net, d_gps, twin)} where d_net is a
+    (K_prev, K_next) matrix (np.inf = unreachable within the search radius), d_gps is
+    the straight-line distance in metres between the two GPS points and twin is a boolean
+    (K_prev, K_next) matrix marking reverse-direction pairs. A pair of arcs is
     measured from the projection of the point on arc a to the projection on arc b:
         same arc:       |difference in position along the arc|
         different arcs: rest of a + shortest path (end of a -> start of b) + part of b
@@ -142,6 +170,7 @@ def network_distances(cand_arcs, trip, txy, keep_idx, segment_id):
     from pathsnap.geo import point_to_segment
 
     arcs, arc_len, seg = trip.arcs, txy.arc_len, txy.seg
+    segment_id = bridge_segments(keep_idx, segment_id, txy.track_xy)
     adj = build_graph(arcs, arc_len)
     cache = {}
     out = {}
@@ -172,7 +201,10 @@ def network_distances(cand_arcs, trip, txy, keep_idx, segment_id):
                 d = reach.get(int(arcs[arc_b, 0]))
                 if d is not None:
                     mat[i, j] = rest_a[i] + d + part_b[j]
-        out[r1] = (r0, mat, d_gps)
+        # twin[i, j] is True when candidate j is the reverse of candidate i (same nodes, opposite
+        # direction): switching to it means the car turned round on the spot.
+        twin = (arcs[a][:, None, 0] == arcs[b][None, :, 1]) & (arcs[a][:, None, 1] == arcs[b][None, :, 0])
+        out[r1] = (r0, mat, d_gps, twin)
     return out
 
 
@@ -209,10 +241,11 @@ def _viterbi_chain(chain, cand_arcs, emission_logp, net, p, w, pred):
     score = w * np.asarray(emission_logp[chain[0]], dtype=float)
     back = []
     for r_prev, r in zip(chain[:-1], chain[1:]):
-        _, d_net, d_gps = net[r]
+        _, d_net, d_gps, twin = net[r]
         pen = np.abs(d_net - d_gps) / p["beta"]
         trans = -np.minimum(pen, p["floor"])          # exp(-|dnet - dgps| / beta), floored
         trans[~np.isfinite(d_net)] = -p["floor"]      # unreachable: floor, never -inf
+        trans = trans - p["uturn"] * twin             # turning round on a two-way road is rare
         cand = score[:, None] + trans
         best = np.argmax(cand, axis=0)
         score = cand[best, np.arange(cand.shape[1])] + w * np.asarray(emission_logp[r], dtype=float)
