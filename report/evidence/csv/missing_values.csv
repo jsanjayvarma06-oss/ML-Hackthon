@@ -1,0 +1,6 @@
+check,count_over_all_train_trips
+track rows with a non-finite value,0
+track time steps with dt <= 0,0
+route arc ids outside the arcs file,0
+nodes with a non-finite coordinate,0
+arcs referencing a missing node,0
