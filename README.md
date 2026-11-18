@@ -52,6 +52,7 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000
 `--host 0.0.0.0` makes the API reachable from other machines (the default, 127.0.0.1, is
 local only). Find Laptop 1's IP with `ipconfig` (Windows) or `ip addr` / `ifconfig`
 (Linux, Mac). Allow inbound TCP 8000 in the firewall if Laptop 2 cannot connect.
+For step-by-step Windows PowerShell firewall configuration, LAN discovery, and client test commands, see [docs/BACKEND_DEPLOYMENT.md](docs/BACKEND_DEPLOYMENT.md).
 
 **Laptop 2 (UI)**:
 
