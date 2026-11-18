@@ -5,7 +5,7 @@ pyarrow
 scipy
 scikit-learn
 lightgbm
-xgboost
+xgboost==3.3.0  # 3.4.x cannot load artifacts/models/xgboost.joblib; 3.1.0 fails on predict
 optuna
 pyproj
 networkx
