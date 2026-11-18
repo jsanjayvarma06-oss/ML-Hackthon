@@ -41,16 +41,23 @@ candidates (`canonical_arc_ids`).
 Emission = classifier probability. Transition = prefers same or connected arcs; otherwise compares
 road distance with GPS distance, with a floor so nothing is impossible. Viterbi = dynamic
 programming that finds the single best chain in time proportional to points x candidates squared.
-**CHECK:** `hmm.py` and `pipeline.py` were stubs at the time of writing; reread the final code.
+Code is `pathsnap/hmm.py` (`network_distances` runs bounded Dijkstra once, `decode` runs Viterbi per segment); reread it before the viva.
 **Q. Why work in log space?** Multiplying hundreds of small probabilities underflows to zero;
 adding logs does not.
-**Q. When does the HMM not help?** Fill from `results/pipeline/hmm_comparison.csv` (per-trip),
-e.g. when candidates miss the true arc, or the route itself is disconnected.
+**Q. Did the HMM help? Numbers?** Train, OOF LightGBM (`hmm_comparison.csv`): nearest arc 0.554
+Top-1, classifier only 0.850, distance-only HMM 0.929, classifier + HMM 0.939. Route continuity
+0.824, 0.944, 0.981, 0.981.
+**Q. So is the classifier useful?** Honestly, it adds about 1 point over a distance-only HMM, and the
+tuned emission weight is small (0.1). Most gain is from the transition model. Do not oversell it.
+**Q. When did the HMM not help?** On 79 of 80 train trips it beat classifier-only; trip 63 got
+worse (0.846 to 0.829). Cause not yet checked (look at the map before claiming one).
+**Q. Were HMM parameters tuned fairly?** Grid of beta, floor, weight on train OOF probabilities;
+scored on the same trips, so slightly optimistic; top settings within about 0.001, so not sensitive.
 
 ## Kushal: models, tuning, UI
 **Q. Which five models and why?** Logistic Regression (simple linear baseline), Random Forest,
 LightGBM (strong on tabular data), MLP (neural, has epoch history), KNN (instance-based).
-**CHECK:** `models.py` was a stub; confirm the final list.
+Implemented so far: Logistic Regression and LightGBM (`pathsnap/models.py`). Models 2, 4, 5: PENDING.
 **Q. What does the classifier predict?** Binary: is this candidate the true arc? We pick the
 highest probability candidate per GPS point (Top-1).
 **Q. Why GroupKFold by trip?** Points in one trip are strongly related; random splits would put
@@ -60,7 +67,11 @@ both classes equally. Log loss checks probability quality, which the HMM depends
 **Q. How does Bayesian optimisation work?** Optuna (TPE) builds a model of which settings gave
 good scores so far and proposes promising next ones, better than blind grid search. Objective,
 ranges, trial count: read `scripts/bayes_opt.py` and `results/models/` trials CSV. **CHECK**.
-**Q. Did tuning help?** Answer only from the untuned vs tuned table in the report.
+**Q. Which is better, LogReg or LightGBM?** CV (train): LightGBM Top-1 0.8505 vs 0.8372, F1 0.9105
+vs 0.8856, better in all 5 folds, but the gap is small next to fold spread (about 0.055).
+**Q. Overfitting?** LightGBM train Top-1 0.879 vs validation 0.851 (mild); LogReg train and
+validation nearly equal. Loss curve (fold 0): validation flattens near 0.155 after about 150 trees.
+**Q. Did tuning help?** PENDING. Answer only from the untuned vs tuned table in the report.
 **Q. Overfitting evidence?** Gap between train and CV score, loss curves for MLP/boosting only.
 **Q. Why no loss curve for Random Forest/KNN?** They have no epoch-by-epoch training; faking one
 is forbidden.
