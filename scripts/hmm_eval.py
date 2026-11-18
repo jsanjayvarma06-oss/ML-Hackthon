@@ -33,10 +33,12 @@ from pathsnap import features, hmm, io, labels, metrics, pipeline  # noqa: E402
 from pathsnap.config import ARTIFACTS_DIR, RESULTS_DIR, STUDENT_TEST_DIR, TRAIN_DIR  # noqa: E402
 
 OUT = RESULTS_DIR / "pipeline"
-BETAS = [5, 10, 20, 50]
+BETAS = [5, 10, 15, 20, 30, 50]
 FLOORS = [25, 50]
-WEIGHTS = [0.05, 0.1, 0.25, 0.5, 1.0]
-DIST_MIX = [0.0, 0.25, 0.5, 1.0]   # v2: distance term added to the classifier emission
+WEIGHTS = [0.03, 0.05, 0.07, 0.1, 0.25, 0.5, 1.0]
+# v2: distance term added to the classifier emission. E4/E5h showed no gain (+0.15 at best),
+# so the grid keeps only 0 to save time; the code path stays for the record.
+DIST_MIX = [0.0]
 DIST_WEIGHTS = [0.25, 0.5, 1.0, 2.0, 4.0]
 
 

@@ -57,3 +57,13 @@ Context: after the student_test run the team asked for at least 95% accuracy. No
 - Tried: direction-aware same-arc transition (moving backwards along a directed arc costs a loop round the network). Train Top-1 dropped to 0.8845 (10 m slack) / 0.9318 (30 m) / 0.9319 (no backward cost). Reason found: 15% of consecutive point pairs on the *reference* arc move backwards by more than 2 m (first 40 train trips), so GPS noise makes "direction" unreliable. Rejected; code unchanged.
 - `python scripts/hmm_mixed_emission.py` -> `hmm_mixed_emission_grid.csv` (160 settings): emission = w_clf*log p + w_dist*Gaussian(d). Best 0.9403 (w_clf 0.1, w_dist 0.5, beta 10, floor 25) vs 0.9388 now: +0.15 points, not adopted (too small to justify a change after the final run).
 - Conclusion: the decoder is on a plateau around 0.94 on train. 95% point-level Top-1 is not reachable with these changes; the remaining errors are mostly junction boundaries and slow-speed twin roads, plus 0.9% candidate misses.
+
+## E5: K=16 candidates + gap bridging + U-turn penalty (train only, adopted as v2)
+Context: the team asked for at least 95% Top-1. Full experiment log with every setting tried: thread E's log (copied to `/mnt/project-files/handoff/work/E/EXPERIMENT_LOG.md`). student_test was not touched.
+- Changes (commits 338a631, 0f43a82): K_CANDIDATES 8 -> 16 (`candidates.py`); the HMM now bridges time-gap segments instead of restarting Viterbi with no memory; switching to the reverse-direction twin arc costs a fixed `uturn` = 100 nats.
+- `scripts/hmm_eval.py` grid widened to beta {5,10,15,20,30,50}, floor {25,50}, emission weight {0.03,0.05,0.07,0.1,0.25,0.5,1.0}.
+- Command: `python scripts/hmm_eval.py --oof results/models/oof_lightgbm_tuned.parquet` (OOF from K=16 rebuild, `bayes_opt.py --reuse-best`).
+- Headline (pooled Top-1 / route continuity, 185,107 labelled points, 80 trips): distance only 0.5536 / 0.8243; distance + HMM 0.9422 / 0.9802; classifier only 0.8504 / 0.9444; **classifier + HMM 0.9510 / 0.9806** (beta 10, floor 50, w 0.1, uturn 100).
+- Honest caveat: the HMM parameters are chosen on the same OOF points they are scored on. Thread E's held-out check (choose params on half the trips, score the other half) gives 0.9480 / 0.9505, so v2 is at the 95% line, not clearly above it.
+- Then `python scripts/export_model.py` rewrote `artifacts/` with these params. API smoke test (in-sample train trips): trip 1 0.998, trip 13 0.993, trip 90 0.927.
+- The v1 (K=8) CSVs are kept in `results/pipeline/v1_k8/` and `results/models/v1_k8/`. The student_test numbers in `hmm_comparison_student_test.csv` are still the v1 one-time run.
