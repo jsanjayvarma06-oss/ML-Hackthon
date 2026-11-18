@@ -12,8 +12,8 @@ from scipy.spatial import cKDTree
 
 from pathsnap.geo import point_to_segment, project_trip, to_local_xy
 
-# From results/pipeline/candidate_miss_rate.csv: K=8 misses 0.9% of train points and
-# 0.25% of student_test points; K=16 only saves another 0.4% but doubles the rows.
+# Chosen on train only (results/pipeline/candidate_miss_rate.csv): K=8 misses 0.9% of
+# labelled train points; K=16 only saves another 0.4% but doubles the rows.
 # K=1 misses ~45% because two-way roads give two arcs at the same distance.
 K_CANDIDATES = 8
 RADIUS_M = 75.0           # above the 50 m label cut-off, so a labelled arc is never cut by radius
