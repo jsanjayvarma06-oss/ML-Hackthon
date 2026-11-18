@@ -1,0 +1,19 @@
+# Use Python 3.11 or 3.12 (some packages may not have 3.14 wheels yet)
+numpy
+pandas
+pyarrow
+scipy
+scikit-learn
+lightgbm
+optuna
+pyproj
+networkx
+matplotlib
+folium
+joblib
+fastapi
+uvicorn[standard]
+requests
+streamlit
+streamlit-folium
+ipykernel

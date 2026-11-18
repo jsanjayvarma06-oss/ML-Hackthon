@@ -1,0 +1,5 @@
+# Laptop 2 (UI only) needs just these
+streamlit
+streamlit-folium
+folium
+requests
