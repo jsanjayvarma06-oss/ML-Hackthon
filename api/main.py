@@ -103,6 +103,50 @@ def models():
     return {"models": names, "default": names[0] if names else None}
 
 
+def _csv_rows(path, columns):
+    """Rows of a results CSV as a list of dicts, keeping and renaming `columns` (old -> new).
+    Returns None when the file does not exist yet."""
+    import pandas as pd
+    if not path.exists():
+        return None
+    df = pd.read_csv(path)
+    keep = [c for c in columns if c in df.columns]
+    df = df[keep].rename(columns=columns)
+    return df.where(df.notna(), None).to_dict(orient="records")
+
+
+@app.get("/comparison")
+def comparison():
+    """Model comparison tables for the UI, read straight from the results/ CSV files.
+
+    Nothing here is computed or typed by hand: each table is a file written by a script
+    (train_models.py, bayes_opt.py, hmm_eval.py). Missing files are simply left out.
+    """
+    res = ARTIFACTS_DIR.parent / "results"
+    out = {
+        "note": "Numbers come from results/models/*.csv and results/pipeline/hmm_comparison.csv.",
+        "classifiers": _csv_rows(res / "models" / "model_comparison.csv", {
+            "model": "Model", "algorithm_family": "Family", "cv_top1_mean": "CV Top-1",
+            "cv_top1_std": "Top-1 std", "cv_f1_macro_mean": "CV macro F1",
+            "cv_log_loss_mean": "CV log loss", "cv_train_top1_mean": "Train Top-1",
+            "oof_route_continuity": "Route continuity", "fit_seconds_mean": "Train s / fold",
+            "infer_ms_per_1000_rows": "Inference ms / 1k rows"}),
+        "tuning": _csv_rows(res / "models" / "tuned_vs_untuned.csv", {
+            "model": "Model", "cv_top1_mean": "CV Top-1", "cv_f1_macro_mean": "CV macro F1",
+            "cv_log_loss_mean": "CV log loss", "fit_seconds_mean": "Train s / fold",
+            "infer_ms_per_1000_rows": "Inference ms / 1k rows"}),
+        "decoder": _csv_rows(res / "pipeline" / "hmm_comparison.csv", {
+            "method": "Method", "top1_pooled": "Top-1", "top1_mean_over_trips": "Top-1 (trip mean)",
+            "route_continuity": "Route continuity", "n_trips": "Trips"}),
+        "student_test": _csv_rows(res / "models" / "final_student_test.csv", {
+            "model": "Model", "test_top1": "Top-1", "test_f1_macro": "Macro F1",
+            "test_log_loss": "Log loss", "test_route_continuity": "Route continuity",
+            "infer_ms_per_1000_rows": "Inference ms / 1k rows"}),
+    }
+    log.info("GET /comparison")
+    return out
+
+
 @app.get("/trips")
 def trips():
     """List the trip ids available in PATHSNAP_EVAL_DIR."""

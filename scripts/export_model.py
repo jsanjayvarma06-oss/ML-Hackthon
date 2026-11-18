@@ -67,8 +67,10 @@ def save_and_verify(bundle, train, cols, out):
     joblib.dump(bundle, out, compress=3)
     back = joblib.load(out)
     sample = train[cols].iloc[:20000]
-    same = np.array_equal(bundle["model"].predict_proba(sample)[:, 1],
-                          back["model"].predict_proba(sample)[:, 1])
+    # allclose, not array_equal: multi-threaded models (Random Forest with n_jobs=-1) sum
+    # their trees in a varying order, so two calls can differ in the last float bits (~1e-16).
+    same = np.allclose(bundle["model"].predict_proba(sample)[:, 1],
+                       back["model"].predict_proba(sample)[:, 1], rtol=0, atol=1e-9)
     assert same and back["feature_columns"] == cols, f"reloaded {out.name} differs"
     return out.stat().st_size / 1e6
 
