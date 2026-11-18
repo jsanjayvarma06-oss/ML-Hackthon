@@ -1,4 +1,4 @@
-"""Evaluator UI (Laptop 2). OWNER: Kushal (handed over from Samarth on 18 Nov, see CLAUDE.md request).
+"""Evaluator UI (Laptop 2). OWNER: Kushal (handed over from Samarth on 18 Nov, see TEAM_OWNERSHIP.md request).
 
 Run:  streamlit run ui/app.py
 Talks to the API only. It never reads data files, never sees the reference route,
