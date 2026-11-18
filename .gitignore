@@ -2,6 +2,10 @@
 data/raw/
 data/evaluator/
 data/processed/
+*.zip
+PathSnap_student_materials/
+Student folder/
+scratch/
 
 # Python
 .venv/
