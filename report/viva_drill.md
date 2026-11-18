@@ -1,8 +1,7 @@
 # PathSnap viva drill
 
 How to use: cover the answer, say yours out loud, compare. Answers are short on purpose; say them in
-your own words. Numbers are real (file named) unless marked **pending final re-run**; if the team re-runs
-the final model, those numbers may move, so open the file and quote it, do not recite from memory.
+your own words. Numbers are real (file named). Quote the file, do not recite from memory. There is no v2 student_test run by team decision (see the UPDATE block at the end).
 "Train" = 80 trips, cross-validation only. "Student-test" = 10 trips, scored once, after choices were frozen.
 
 ---
@@ -51,7 +50,7 @@ Multiplying hundreds of small probabilities underflows to zero; adding logs does
 Segments are decoded separately; an unreachable transition costs the floor, so one bad point cannot kill the path. Points without candidates get -1.
 
 **15. What did the HMM add? (hard)**
-v2 train OOF: classifier only 0.850 Top-1, classifier + HMM 0.951, distance-only HMM 0.942 (`hmm_comparison.csv`); v1 was 0.851 / 0.939 / 0.929. Student-test (v1 only, v2 pending): 0.863, 0.921, 0.937 (`hmm_comparison_student_test.csv`). Most of the gain is the HMM, not the classifier. Also be ready for: HMM now bridges time gaps (`hmm.bridge_segments`, up to 5,000 m) and adds a U-turn penalty of 100 for switching to the reverse twin arc.
+v2 train OOF: classifier only 0.850 Top-1, classifier + HMM 0.951, distance-only HMM 0.942 (`hmm_comparison.csv`); v1 was 0.851 / 0.939 / 0.929. Student-test (v1 only; no v2 student_test run, by team decision): 0.863, 0.921, 0.937 (`hmm_comparison_student_test.csv`). Most of the gain is the HMM, not the classifier. Also be ready for: HMM now bridges time gaps (`hmm.bridge_segments`, up to 5,000 m) and adds a U-turn penalty of 100 for switching to the reverse twin arc.
 
 ---
 ## Samarth: API, deployment, EDA
@@ -119,8 +118,8 @@ Most candidates are wrong (class imbalance), macro F1 weighs both classes equall
 **5. Report the CV comparison.**
 v2 CV Top-1 (K=16): LightGBM 0.8520, Random Forest 0.8489, MLP 0.8459, LogReg 0.8395; KNN 0.8371 (all rows are v2 now; v1 table in `v1_k8/`). Fold standard deviation is about 0.055 to 0.058, much larger than the 0.014 spread between models, so differences of thousandths are not significant.
 
-**6. Student-test results? (v1 K=8 run; v2 run pending approval)**
-Top-1 / F1 / log loss: LightGBM 0.8634 / 0.9167 / 0.1020; RF 0.8596 / 0.9157 / 0.1065; MLP 0.8558 / 0.9129 / 0.1079; LogReg 0.8466 / 0.8935 / 0.1517; KNN 0.8460 / 0.9073 / 0.2284 (`final_student_test.csv`). Quote the file if a final re-run changes them (**pending final re-run**).
+**6. Student-test results? (v1 K=8 run; no v2 run, by team decision)**
+Top-1 / F1 / log loss: LightGBM 0.8634 / 0.9167 / 0.1020; RF 0.8596 / 0.9157 / 0.1065; MLP 0.8558 / 0.9129 / 0.1079; LogReg 0.8466 / 0.8935 / 0.1517; KNN 0.8460 / 0.9073 / 0.2284 (`final_student_test.csv`). These are the v1 numbers; they are final (no re-run, by team decision).
 
 **7. Why did KNN overfit? (hard)**
 In training each point is its own nearest neighbour: train Top-1 0.995 and train log loss 0.0000 versus validation Top-1 0.8371 and log loss 0.1762, the worst (v2). It memorises, so its probabilities are overconfident, which is bad for an HMM emission. It is also the slowest at prediction (472 ms per 1,000 rows).
@@ -156,10 +155,10 @@ Once, with `train_models.py --final`, after every choice was frozen. It was neve
 A file in `results/`; each placeholder or number names its file. Be ready to open it. If a number is not in a file, it must not be in the report.
 
 **2. Why keep the classifier when distance-only HMM won on student_test? (hard)**
-Student-test Top-1: distance + HMM 0.9368, classifier + HMM 0.9214. On train CV the classifier + HMM led by about 1 point (0.9388 vs 0.9289). With only 10 test trips the gap may be noise, but we cannot claim the classifier helps once the HMM is applied. We decided before the run and did not change afterwards. The classifier is still far better than nearest arc (0.863 vs 0.535). Cause undiagnosed. (**pending final re-run**: check hmm_comparison_student_test.csv.)
+Student-test Top-1: distance + HMM 0.9368, classifier + HMM 0.9214. On train CV the classifier + HMM led by about 1 point (0.9388 vs 0.9289). With only 10 test trips the gap may be noise, but we cannot claim the classifier helps once the HMM is applied. We decided before the run and did not change afterwards. The classifier is still far better than nearest arc (0.863 vs 0.535). Cause undiagnosed. (v1 student-test file: `hmm_comparison_student_test.csv`; no v2 student-test run exists, by team decision.)
 
 **3. Why not 95% or higher? (hard)**
-Four honest limits: (a) 0.9% of labelled points have the true arc outside the 8 candidates; (b) labels are themselves an alignment, and some reference routes are disconnected or do not cover the track; (c) GPS noise near parallel roads and junctions; (d) the HMM tuned on a small grid with 4 parameters. Student-test classifier + HMM was 0.921, distance + HMM 0.937. Quote the pending final number.
+Four honest limits: (a) 0.48% of labelled points have the true arc outside the 16 candidates (0.92% with 8 in v1); (b) labels are themselves an alignment, and some reference routes are disconnected or do not cover the track; (c) GPS noise near parallel roads and junctions; (d) the HMM tuned on a small grid with 4 parameters. v1 student-test classifier + HMM was 0.921 (distance + HMM 0.937); v2 train CV reaches 0.951 but that is optimistic (held-out check 0.948 to 0.951) and v2 was not scored on student_test, by team decision. Quote the files: v1 student-test is the one-time number; v2 is train CV only.
 
 **4. What is Top-1 vs route continuity?**
 Top-1: share of labelled points whose predicted arc equals the reference arc (`metrics.top1_accuracy`). Continuity: share of consecutive predicted arcs that are the same or connected (`metrics.route_continuity`). A route can be connected and still wrong, so we report both.
@@ -203,6 +202,6 @@ If it has no file, if it mixes partitions (train vs student_test), or if it was 
 
 ## UPDATE: v2 pipeline (read this first)
 The system now has two versions. **v1** = K=8 candidates and the first HMM; its one-time student_test run is done (numbers above). **v2** = K=16 candidates (miss rate 0.48% instead of 0.92%), the HMM bridges time gaps instead of restarting, and switching to the reverse-direction twin arc costs a U-turn penalty of 100 (HMM settings beta 10, floor 50, emission weight 0.1). Train CV Top-1 / route continuity (`results/pipeline/hmm_comparison.csv`): distance only 0.5536 / 0.8243; distance + HMM 0.9422 / 0.9802; classifier only 0.8504 / 0.9444; **classifier + HMM 0.9510 / 0.9806**. Classifier CV Top-1 (v2, `model_comparison.csv`): LightGBM 0.8520, Random Forest 0.8489, MLP 0.8459, LogReg 0.8395 (KNN row still v1 K=8: 0.8379). Tuning again made no difference (0.852 vs 0.852).
-- **Caveats you must say:** (1) HMM parameters were chosen on the same out-of-fold points they are scored on; a held-out check gives 0.948 to 0.951, so v2 is at about 95%, not clearly above. (2) The v2 student_test run is **pending the team's approval**; all student_test numbers in this document are v1. (3) The 95% target was set by the team after seeing the v1 student_test result (there is no such threshold in the official PDFs). All v2 choices used train data only, but a v2 student_test run would no longer be a completely untouched check; say so honestly.
-- **Hard question: "You changed the system after seeing student_test. Isn't that leakage?"** Answer: we did not use student_test to choose anything. The goal (95%) was set after we saw the v1 number, and every change (K=16, gap bridging, U-turn penalty) was selected on train out-of-fold data only (`EXPERIMENTS.md` E4, E5). But the motivation came after the look, so we report the v1 student_test number as our clean one-time result and treat any v2 student_test number as less clean.
-- Pending final re-run: all v2 student_test numbers.
+- **Caveats you must say:** (1) HMM parameters were chosen on the same out-of-fold points they are scored on; a held-out check gives 0.948 to 0.951, so v2 is at about 95%, not clearly above. (2) The team decided not to re-run student_test for v2, so all student_test numbers in this document are v1 and v2 is train CV only. (3) The 95% target was set by the team after seeing the v1 student_test result (there is no such threshold in the official PDFs). All v2 choices used train data only, but a second look at student_test would not be a clean test, so the team decided not to run it; say so honestly.
+- **Hard question: "You changed the system after seeing student_test. Isn't that leakage?"** Answer: we did not use student_test to choose anything. The goal (95%) was set after we saw the v1 number, and every change (K=16, gap bridging, U-turn penalty) was selected on train out-of-fold data only (`EXPERIMENTS.md` E4, E5). But the motivation came after the look, so we report the v1 student_test number as our clean one-time result, and we chose not to look at student_test again for v2.
+- No v2 student_test numbers exist, by team decision (a second look would not be a clean test).

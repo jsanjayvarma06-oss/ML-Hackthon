@@ -1,6 +1,6 @@
 # PathSnap technical report (team skeleton)
 
-> **Status: two pipeline versions are described. v1 = K=8 candidates and the first HMM (its one-time student_test run is done). v2 = K=16 candidates, HMM with gap bridging and a U-turn penalty (train results only; a v2 student_test run is pending the team's approval). Every table says which version it is.** Layout follows `Deliverables.pdf` sections 2.2 to 8. Every number is
+> **Status: two pipeline versions are described. v1 = K=8 candidates and the first HMM (its one-time student_test run is done). v2 = K=16 candidates, HMM with gap bridging and a U-turn penalty (train results only; the team decided not to re-run student_test for v2, see below). Every table says which version it is.** Layout follows `Deliverables.pdf` sections 2.2 to 8. Every number is
 > either (a) quoted from a file already in `results/` (the file is named next to it), or
 > (b) a placeholder written as `[[TODO: value <- results/<file>]]`. Nothing here has been
 > measured unless a file is cited. Replace each placeholder only with the real value from
@@ -171,7 +171,7 @@ Log loss measures how honest the probabilities are, which matters because the HM
 `results/models/model_comparison.csv`; same 5 GroupKFold folds for every model, all rows v2 (the KNN row was re-run on K=16 after the first v2 table). The v1 table is kept in
 `results/models/v1_k8/`. The Student-test Macro F1 column is from the one-time v1 (K=8) run
 (`results/models/final_student_test.csv`, each model refit on all 80 train trips, scored once on 10
-student_test trips, 19,132 labelled points). A v2 student_test run has not been done. Top-1 is mean
+student_test trips, 19,132 labelled points). No v2 student_test run exists by team decision: the 95% target was set after seeing the v1 result, so a second look would not be a clean test. Top-1 is mean
 over folds ± standard deviation. Route continuity is on out-of-fold classifier-only predictions
 (no HMM). Inference time is per 1,000 candidate rows.
 
@@ -348,20 +348,19 @@ transition (lowered Top-1 to 0.8845 to 0.9319, because 15% of consecutive points
 "backwards" by more than 2 m from noise) and a mixed classifier + distance emission (+0.15 points,
 too small to adopt). v2 then raised K to 16, bridged gaps and added the U-turn penalty (E5). All of
 these were chosen using train data only; student_test was not used for any v2 choice. **However,
-because the goal was set after seeing the v1 student_test number, a v2 student_test run would no
-longer be a fully untouched check; say so if one is reported.**
+because the goal was set after seeing the v1 student_test number, a second look at student_test would not be a clean test, so **the team decided not to re-run student_test for v2**. v1 is the one-time student_test result; v2 is reported on train CV only.**
 
 **Did HMM decoding improve the final route?** Pooled over points, tuned LightGBM probabilities.
 Train = 80 trips, 185,107 labelled points, out-of-fold. Student-test = 10 trips, 19,132 labelled
-points, **v1 only (K=8, one-time run, `hmm_comparison_student_test.csv`); a v2 student_test run is
-pending the team's approval, so the v2 student-test cells are not available.**
+points, **v1 only (K=8, one-time run, `hmm_comparison_student_test.csv`); the team decided not
+to re-run student_test for v2 (see above).**
 
 | Method | Train v1 Top-1 / continuity | Train v2 Top-1 / continuity | Student-test v1 Top-1 / continuity | Student-test v2 |
 |---|---|---|---|---|
-| Nearest arc (distance only) | 0.5536 / 0.8243 | 0.5536 / 0.8243 | 0.5351 / 0.8209 | `[[pending v2 run]]` |
-| Distance emission + HMM (no ML) | 0.9289 / 0.9813 | 0.9422 / 0.9802 | 0.9368 / 0.9809 | `[[pending v2 run]]` |
-| Classifier only (tuned LightGBM) | 0.8508 / 0.9441 | 0.8504 / 0.9444 | 0.8630 / 0.9431 | `[[pending v2 run]]` |
-| Classifier + HMM | 0.9388 / 0.9809 | **0.9510 / 0.9806** | 0.9214 / 0.9818 | `[[pending v2 run]]` |
+| Nearest arc (distance only) | 0.5536 / 0.8243 | 0.5536 / 0.8243 | 0.5351 / 0.8209 | not run (team decision) |
+| Distance emission + HMM (no ML) | 0.9289 / 0.9813 | 0.9422 / 0.9802 | 0.9368 / 0.9809 | not run (team decision) |
+| Classifier only (tuned LightGBM) | 0.8508 / 0.9441 | 0.8504 / 0.9444 | 0.8630 / 0.9431 | not run (team decision) |
+| Classifier + HMM | 0.9388 / 0.9809 | **0.9510 / 0.9806** | 0.9214 / 0.9818 | not run (team decision) |
 
 What this shows, stated honestly:
 - **Most of the gain comes from the HMM, not the classifier.** In v2 the HMM lifts the classifier from
@@ -373,7 +372,7 @@ What this shows, stated honestly:
   the reverse of the train ordering. We changed nothing in response to that number, and we have not
   diagnosed the reversal. With only 10 trips it may be noise, but we cannot claim the classifier
   improves the final route once the HMM is applied. Whether the reversal remains in v2 is unknown
-  until a v2 student_test run. `[[TODO: per-trip student_test files do not exist, so no breakdown]]`
+  (no v2 student_test run, by team decision). `[[TODO: per-trip student_test files do not exist, so no breakdown]]`
 - **v2 reaches 0.951 on train, but that is an optimistic in-sample selection:** held-out estimate
   0.948 to 0.951. We should not describe v2 as "above 95%" with confidence.
 - **Per trip, v2, train (80 trips):** classifier + HMM beats classifier-only on 79 trips and is worse
