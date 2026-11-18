@@ -1,6 +1,6 @@
 # PathSnap technical report (team skeleton)
 
-> **Status: partly filled (dataset, EDA, preprocessing, models 1 and 3 CV).** Layout follows `Deliverables.pdf` sections 2.2 to 8. Every number is
+> **Status: filled from train results (data, EDA, all 5 models, tuning, HMM). Student-test cells are placeholders.** Layout follows `Deliverables.pdf` sections 2.2 to 8. Every number is
 > either (a) quoted from a file already in `results/` (the file is named next to it), or
 > (b) a placeholder written as `[[TODO: value <- results/<file>]]`. Nothing here has been
 > measured unless a file is cited. Replace each placeholder only with the real value from
@@ -161,94 +161,111 @@ which is imbalanced (most candidates are wrong), so it averages the F1 of both c
 Log loss measures how honest the probabilities are, which matters because the HMM uses them.
 
 ### 3.1 Overall comparison table
-Source for every cell: `results/models/model_comparison.csv`. Rows 1 and 3 are filled from
-5-fold GroupKFold CV on train (untuned defaults, milestone 1). The "Top-1" and "Log loss" cells
-are CV values until the one-time student_test run is done; the Student-test Macro F1 column and
-rows 2, 4, 5 stay as placeholders. Route continuity here is computed on out-of-fold
-classifier-only predictions (no HMM). Inference time is measured per 1,000 candidate rows.
+Source for every filled cell: `results/models/model_comparison.csv` (5-fold GroupKFold CV on train,
+untuned defaults, same folds for every model). Top-1 is mean over folds ± standard deviation. Route
+continuity is computed on out-of-fold classifier-only predictions (no HMM). Inference time is per
+1,000 candidate rows. The Student-test Macro F1 column is a placeholder: the one-time student_test
+run has not been done and waits for the team's go-ahead.
 
-| Model | Algorithm family | Key configuration | CV Macro F1 | Top-1 accuracy | Route continuity | Student-test Macro F1 | Log loss | Inference time |
+| Model | Algorithm family | Key configuration | CV Macro F1 | CV Top-1 | Route continuity | Student-test Macro F1 | CV log loss | Inference time |
 |---|---|---|---|---|---|---|---|---|
-| 1 Logistic Regression | linear / probabilistic | C=1.0, no class weight, standardised inputs | 0.8856 ± 0.0311 | 0.8372 ± 0.0569 (CV) | 0.9094 (out-of-fold) | `[[TODO: student_test, --final]]` | 0.1622 (CV) | 0.15 ms per 1,000 rows |
-| 2 Random Forest | bagged trees | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` |
-| 3 LightGBM (untuned) | boosted trees | 400 trees, learning rate 0.05, 31 leaves, min child samples 50, subsample 0.8, colsample 0.8 | 0.9105 ± 0.0324 | 0.8505 ± 0.0551 (CV) | 0.9287 (out-of-fold) | `[[TODO: student_test, --final]]` | 0.1121 (CV) | 3.77 ms per 1,000 rows |
-| 4 MLP | neural network | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` |
-| 5 KNN (distance-weighted) | instance-based | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` |
+| 1 Logistic Regression | linear / probabilistic | C=1.0, standardised inputs | 0.8856 | 0.8372 ± 0.0569 | 0.9094 | `[[TODO: --final]]` | 0.1622 | 0.15 ms |
+| 2 Random Forest | bagging ensemble | 150 trees, max depth 14, min leaf 20, max features sqrt | 0.9092 | 0.8480 ± 0.0559 | 0.9209 | `[[TODO: --final]]` | 0.1157 | 2.09 ms |
+| 3 LightGBM | boosting | 400 trees, lr 0.05, 31 leaves, min child 50 | 0.9105 | 0.8505 ± 0.0551 | 0.9287 | `[[TODO: --final]]` | 0.1121 | 3.77 ms |
+| 4 MLP | neural network | hidden (64, 32), alpha 1e-4, trained on 100,000 points per fit | 0.9071 | 0.8451 ± 0.0563 | 0.9276 | `[[TODO: --final]]` | 0.1190 | 0.32 ms |
+| 5 KNN (distance-weighted) | instance-based | 25 neighbours, trained on 40,000 points per fit | 0.9021 | 0.8379 ± 0.0549 | 0.9191 | `[[TODO: --final]]` | 0.2536 | 312.8 ms |
+| Baseline: nearest arc | none | K=1 | N/A, not a probabilistic classifier | about 0.554 (1 minus K=1 miss rate 0.446) | 0.8243 | `[[TODO: --final]]` | N/A | N/A |
 
-Baseline row to add: "nearest arc (K=1)" Top-1 = 1 minus 44.6% miss = about 55.4% on train
-(`results/pipeline/candidate_miss_rate.csv`); this is the bar the models must beat.
-If a metric does not apply to a model, write N/A and the reason in the cell. Model-selection
-statement (which model, and why, in terms of CV on train, not student_test):
-`[[TODO <- results/models/model_comparison.csv]]`.
+The tuned LightGBM is reported in section 4. Student-test Top-1 and log loss will be added from
+`results/models/final_student_test.csv` when that run is done.
 
-### 3.2 Per-model subsections (repeat the block below for models 1 to 5)
-Answer from the team's own experiments, not textbook text. Source folder: `results/models/`.
+**Model selection (decided on CV only, before any student_test run).** Rule written before tuning
+in `scripts/bayes_opt.py`: highest CV Top-1, ties within 0.002 broken by lower log loss.
+LightGBM has both the highest Top-1 (0.8505) and the lowest log loss (0.1121); runner-up Random
+Forest is 0.0025 behind. **Be honest about the margin:** the fold-to-fold standard deviation is
+about 0.055 for every model, because some validation folds contain hard trips, while the gap between
+best and worst model is only 0.013. Models are ranked on identical folds so the ordering is fair,
+but differences of a few thousandths should not be read as significant. LogReg and KNN are clearly
+behind on log loss; the three non-linear models are very close.
 
-**Template (used for models 2, 4 and 5 until their results exist). Models 1 and 3 follow below.**
+### 3.2 Per-model subsections
+Sources: `results/models/model_comparison.csv`, `cv_folds.csv`, `report/models_and_tuning.md`.
+Student-test items (C7, C8) are placeholders until the one-time run. Overfitting evidence below is
+mean train vs validation over the 5 folds (`cv_folds.csv`).
 
-**Model N: `[[name]]`**
-- **A1 Why suitable for PathSnap?** `[[TODO, in own words, tied to the 13 features]]`
-- **A2 Strengths and limitations here:** `[[TODO, tied to observed results]]`
-- **B5 Important hyperparameters and initial values:** `[[TODO <- artifacts / results/models/*params*]]`
-- **B6 Loss / objective:** `[[TODO, e.g. log loss for logistic regression; state what was actually used]]`
-- **C7 Performance on student_test:** `[[TODO <- results/models/model_comparison.csv]]`
-- **C8 Observation-level Top-1, Macro F1, Log loss on student_test:** `[[TODO]]`
-- **C9 Over/underfitting and the evidence:** `[[TODO: train score vs CV score gap, learning curve or loss curve <- results/models/]]`
+**Model 1: Logistic Regression**
+- **A1 Why suitable?** Simplest model that outputs a probability for "is this candidate the true arc?"; a fair baseline, and probabilities usable as HMM emissions. Inputs are standardised because features have different units.
+- **A2 Strengths / limitations:** Fast (1.7 s per fold) and stable, but linear, so it cannot express "close AND same direction". It trails the non-linear models on every metric.
+- **B5 Hyperparameters:** C=1.0, no class weight, lbfgs, max_iter 1000, seed 42. **B6 Objective:** log loss with L2 regularisation.
+- **C7 to C8 Student-test:** `[[TODO: --final]]`
+- **C9 Fit:** train Top-1 0.8376 vs validation 0.8372; train log loss 0.1596 vs 0.1622. No overfitting; the model is limited by its linear form (mild underfitting).
 
-**Model 1: Logistic Regression** (`pathsnap/models.py`, results `results/models/model_comparison.csv`, `cv_folds.csv`)
-- **A1 Why suitable?** It is the simplest model that outputs a probability for "is this candidate the true arc?", so it is a fair baseline and its probabilities work as HMM emissions. Inputs are standardised first because features have different units (metres, degrees, 0 to 1).
-- **A2 Strengths and limitations (from our runs):** It is fast (about 1.7 s per fold to fit) and train and validation scores are almost the same, so it is stable. But it can only draw a linear boundary, so it cannot express rules like "close AND heading matches", and it trails LightGBM on every metric in every fold (see below).
-- **B5 Hyperparameters:** C=1.0 (inverse regularisation strength), class_weight=None, solver lbfgs, max_iter 1000, seed 42. No tuning done yet.
-- **B6 Objective:** log loss (cross-entropy) with L2 regularisation.
-- **C7 to C8 Student-test results:** `[[TODO: Top-1, Macro F1, log loss on student_test <- results/models/final_student_test.csv, produced once at the end]]`
-- **C9 Over/underfitting evidence** (`cv_folds.csv`, mean over 5 folds): train Top-1 0.8376 vs validation 0.8372; train Macro F1 0.8869 vs validation 0.8856; train log loss 0.1596 vs validation 0.1622. The train and validation values are almost identical, so there is no overfitting. Scores are not high either, and the model is beaten by LightGBM, which suggests it is limited by its linear form (mild underfitting). The large spread across folds (validation Top-1 from 0.771 in fold 0 to 0.912 in fold 2) shows that results depend on which trips are held out, not on overfitting.
+**Model 2: Random Forest**
+- **A1 Why suitable?** Many decorrelated trees average out noise and capture non-linear rules without scaling.
+- **A2 Strengths / limitations:** Close to LightGBM (Top-1 within 0.003) but about 4 times slower to fit (37 s per fold).
+- **B5 Hyperparameters:** 150 trees, max depth 14, min samples per leaf 20, max features sqrt, max_samples 0.5, seed 42. **B6 Objective:** Gini impurity per tree; probabilities from tree voting.
+- **C7 to C8 Student-test:** `[[TODO: --final]]`
+- **C9 Fit:** train Top-1 0.8622 vs validation 0.8480; train log loss 0.1021 vs 0.1157. Mild overfitting, limited by the depth and leaf-size settings.
 
-**Model 3: LightGBM, untuned** (same files)
-- **A1 Why suitable?** The tabular features interact (a close arc with the wrong heading is wrong; a farther arc with the right heading and continuity may be right). Boosted trees learn such rules automatically, need no scaling and train quickly on 1.19 million rows.
-- **A2 Strengths and limitations (from our runs):** Best CV scores so far on all metrics. Costs more: about 9.7 s per fold to fit and 3.77 ms per 1,000 rows to predict (25 times slower than Logistic Regression, still small). It overfits somewhat (below).
-- **B5 Hyperparameters and initial values:** n_estimators 400, learning_rate 0.05, num_leaves 31, min_child_samples 50, subsample 0.8, colsample_bytree 0.8, reg_lambda 1.0, seed 42. Tuning: see section 4.
-- **B6 Objective:** binary log loss, optimised by gradient boosting.
-- **C7 to C8 Student-test results:** `[[TODO <- results/models/final_student_test.csv]]`
-- **C9 Over/underfitting evidence** (`cv_folds.csv`, mean over 5 folds): train Top-1 0.8788 vs validation 0.8505; train Macro F1 0.9281 vs validation 0.9105; train log loss 0.0913 vs validation 0.1121. Training is clearly better than validation on all three, so there is a mild overfit. The per-iteration validation loss curve is `results/models/plots/loss_curve_lightgbm.png`: What the plot shows (CV fold 0 only, not an average): validation log loss falls fast over the first about 60 iterations, then flattens at about 0.155 from roughly iteration 150 onward, with at most a very slight rise near iteration 400, while training loss keeps falling to about 0.083. The widening gap between the two curves is the overfitting; extra trees past about 150 add almost nothing on validation, so fewer trees or stronger regularisation are reasonable things for the tuning step to test. (Fold 0 values match `cv_folds.csv`: train 0.0829, validation 0.1549.)
+**Model 3: LightGBM (untuned)**
+- **A1 Why suitable?** Features interact (a close arc with the wrong heading is wrong); boosted trees learn such rules, need no scaling and are fast on 1.19 million rows.
+- **A2 Strengths / limitations:** Best CV Top-1 and log loss. 9.7 s per fold to fit, 3.77 ms per 1,000 rows to predict. Mild overfitting.
+- **B5 Hyperparameters:** 400 trees, lr 0.05, 31 leaves, min child samples 50, subsample 0.8, colsample 0.8, reg_lambda 1.0, seed 42. **B6 Objective:** binary log loss via gradient boosting.
+- **C7 to C8 Student-test:** `[[TODO: --final]]`
+- **C9 Fit:** train Top-1 0.8788 vs validation 0.8505; train log loss 0.0913 vs 0.1121 (mild overfit). Loss curve (CV fold 0 only, `plots/loss_curve_lightgbm.png`): validation loss flattens near 0.155 from about iteration 150 while training loss keeps falling to about 0.083.
 
-**Comparison of models 1 and 3 on CV (`results/models/model_comparison.csv`, `cv_folds.csv`):**
-LightGBM beats Logistic Regression in all five folds on both Top-1 and Macro F1. Mean CV Top-1 is
-0.8505 vs 0.8372, a gap of about 0.013, which is much smaller than the spread between folds
-(standard deviation about 0.055). Because folds are different trips, compare per fold, not just
-means; the per-fold ordering is consistent but the gap in absolute terms is modest. Both are
-well above the nearest-arc baseline of about 0.554 Top-1 (1 minus the K=1 miss rate of 0.446).
+**Model 4: MLP (neural network)**
+- **A1 Why suitable?** A neural-network family member that can learn non-linear combinations of the 13 features and has a real epoch history.
+- **A2 Strengths / limitations:** Competitive (Top-1 0.8451) and fast at prediction (0.32 ms per 1,000 rows), but not better than boosting on tabular features. Trained on a fixed 100,000-point subsample per fit for compute reasons (validation folds are never subsampled).
+- **B5 Hyperparameters:** hidden layers (64, 32), alpha (L2) 1e-4, constant learning rate, early stopping, seed 42. **B6 Objective:** log loss (cross-entropy), optimised by gradient descent.
+- **C7 to C8 Student-test:** `[[TODO: --final]]`
+- **C9 Fit:** train Top-1 0.8563 vs validation 0.8451; train log loss 0.1082 vs 0.1190. Small gap, mild overfit. Loss curve: `plots/loss_curve_mlp.png` (CV fold 0). Training loss drops quickly in the first 2 epochs then flattens at about 0.10 over about 27 epochs. The orange line in that plot is the MLP's validation **score** (an accuracy-type value near 0.95), not a loss, so it must not be read as a loss curve. `[[TODO: ask Kushal to relabel or split this axis before it goes in the PDF]]`
 
-### 3.3 Model visualisations (each must come from a real run)
-- CV Macro F1: `results/models/plots/cv_f1_macro.png` (also `cv_top1.png`). Currently models 1 and 3 only; regenerate when all five are done.
-- Student-test Top-1 and Macro F1 `[[TODO]]`
-- Log loss comparison: `results/models/plots/cv_log_loss.png` (CV values for now).
-- Confusion matrices (optional) `[[TODO]]`
-- Training/validation loss curves: **only** MLP and boosting with an evaluation set. Do not
-  draw curves for Logistic Regression (if solved in closed form/iterations without epoch
-  history), Random Forest or KNN. LightGBM: `results/models/plots/loss_curve_lightgbm.png` (exists). MLP: `[[TODO]]`.
+**Model 5: KNN (distance-weighted)**
+- **A1 Why suitable?** An instance-based method with no training assumptions; included as a different family for comparison.
+- **A2 Strengths / limitations:** Cheapest to fit (0.4 s) but the slowest to predict (312.8 ms per 1,000 rows) and its probabilities are poorly calibrated, which makes it a weak HMM emission. Trained on a fixed 40,000-point subsample per fit.
+- **B5 Hyperparameters:** 25 neighbours, distance weighting, standardised inputs. **B6 Objective:** none (no training loss); it votes among neighbours.
+- **C7 to C8 Student-test:** `[[TODO: --final]]`
+- **C9 Fit:** strong overfitting: train Top-1 0.9908 and train log loss 0.0000 (each training point is its own nearest neighbour) against validation Top-1 0.8379 and log loss 0.2536, the worst of all models.
+
+### 3.3 Model visualisations (all from real runs)
+- CV Macro F1, all five models: `results/models/plots/cv_f1_macro.png`; CV Top-1: `cv_top1.png`.
+- Log loss comparison: `results/models/plots/cv_log_loss.png` (CV values).
+- Student-test Top-1 and Macro F1 comparison, confusion matrices: `[[TODO: after the --final run]]`.
+- Loss curves, only for models with real iteration histories: LightGBM `plots/loss_curve_lightgbm.png` (and `loss_curve_lightgbm_tuned.png`), MLP `plots/loss_curve_mlp.png`. None for Logistic Regression, Random Forest or KNN.
 
 ---
 
-## 4. Bayesian hyperparameter optimisation (chosen model: `[[TODO]]`)
-Tool: Optuna (TPE sampler), seed `config.SEED`. Every trial is saved to CSV.
-1. Hyperparameters searched: `[[TODO <- scripts/bayes_opt.py]]`
-2. Ranges / distributions: `[[TODO]]`
-3. Objective optimised: `[[TODO, expected: CV Macro F1 or CV log loss on train, GroupKFold by trip_id]]`
-4. Number of trials: `[[TODO <- results/models/optuna_trials.csv]]`
-5. Best values: `[[TODO]]`
-6. Did tuning beat untuned? `[[TODO]]` Untuned vs tuned, same data and metrics:
+## 4. Bayesian hyperparameter optimisation (chosen model: LightGBM)
+Sources: `results/models/optuna_trials.csv`, `best_params.json`, `tuned_vs_untuned.csv`,
+`cv_folds_tuned.csv`, `plots/optuna_history.png`, `plots/optuna_param_importance.png`.
+Tool: Optuna with the TPE sampler (Tree-structured Parzen Estimator), seed 42. In simple terms,
+TPE keeps track of which parameter regions scored well versus badly and proposes new settings
+where "good" is most likely, so it needs far fewer trials than a grid search.
+1. **Hyperparameters searched:** n_estimators, learning_rate, num_leaves, min_child_samples, subsample, colsample_bytree, reg_lambda.
+2. **Ranges:** n_estimators 100 to 600; learning_rate 0.01 to 0.2 (log scale); num_leaves 8 to 128 (log); min_child_samples 10 to 400 (log); subsample 0.5 to 1; colsample_bytree 0.5 to 1; reg_lambda 0.001 to 30 (log). (From `report/models_and_tuning.md`; confirm against `scripts/bayes_opt.py`.)
+3. **Objective:** mean validation Top-1 over GroupKFold(3) by trip on the 80 train trips (3 folds so a trial costs about 30 s). Why LightGBM: it won the rule on CV Top-1 and log loss (section 3.1).
+4. **Trials:** 40, every trial saved in `optuna_trials.csv` with parameters, per-fold score and duration. Trial scores: min 0.8336, median 0.8492, max 0.8496 (best is trial 33).
+5. **Best values:** n_estimators 450, learning_rate 0.0326, num_leaves 50, min_child_samples 121, subsample 0.592, colsample_bytree 0.572, reg_lambda 0.197.
+6. **Did tuning beat untuned?** Barely. Same 5 folds, same data (`tuned_vs_untuned.csv`):
 
-| | CV Macro F1 | Student-test Top-1 | Student-test Macro F1 | Log loss | Inference time |
-|---|---|---|---|---|---|
-| Untuned | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` |
-| Tuned | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` | `[[TODO]]` |
+| | CV Macro F1 | CV Top-1 | CV log loss | Train Top-1 | Route continuity (OOF) | Student-test Top-1 | Student-test Macro F1 | Inference time |
+|---|---|---|---|---|---|---|---|---|
+| Untuned | 0.9105 | 0.8505 | 0.1121 | 0.8788 | 0.9287 | `[[TODO: --final]]` | `[[TODO: --final]]` | 3.77 ms / 1,000 rows |
+| Tuned | 0.9111 | 0.8510 | 0.1116 | 0.8762 | 0.9282 | `[[TODO: --final]]` | `[[TODO: --final]]` | 5.33 ms / 1,000 rows (`cv_folds_tuned.csv`; machine load may differ) |
 
-Plots: optimisation history, parameter importance `[[TODO: results/models/plots/]]`.
-Be honest if the gain is small or within noise.
+**Plain reading:** tuning improved CV Top-1 by only +0.0005, far inside the fold spread (about
+0.055), so it is not a meaningful gain. Most trials landed near 0.849, which suggests the default
+LightGBM was already near the plateau for these 13 features. The visible benefit is a slightly
+smaller train-validation gap (train Top-1 0.8788 to 0.8762). Bigger improvements are more likely to
+come from features or the HMM than from hyperparameters. Caveat: tuning and the comparison used the
+same 80 train trips and no nested cross-validation, so the tuned figure is mildly optimistic.
+The model chosen for the system is `lightgbm_tuned`.
 
 ---
 
 ## 5. HMM and Viterbi route reconstruction
+> **Tuned-model update (from the lead thread's re-run, `results/pipeline/EXPERIMENTS.md` entry E3; `[[TODO: verify these two rows against that file once it is applied]]`):** with out-of-fold probabilities from the tuned LightGBM, classifier-only is 0.8508 Top-1 / 0.9441 continuity and classifier + HMM is 0.9388 / 0.9809, with unchanged HMM parameters (beta 10, floor 25, weight 0.1). The tables below show the untuned-model run in `hmm_comparison.csv`; use the tuned numbers for the final model.
 Plain-language idea: the classifier judges each GPS point alone and can jump between roads, or
 pick the wrong direction of a two-way road. A real vehicle cannot teleport, so we look for the
 single best *whole* chain of arcs. Viterbi is the dynamic-programming method that finds that
@@ -325,6 +342,7 @@ state partition]]`. Include one good case and one failure case.
   on Laptop 2 (`ui/app.py`), reached over the same network. The API runs the full pipeline live
   on the chosen trip; the reference route is read only to compute the accuracy and is never sent
   to the UI.
+- Model picker and comparison page: the UI lets the evaluator choose which trained model runs and has a "Model comparison" page. The API serves them through `GET /models` and `GET /comparison` (as reported by the lead thread; `[[TODO: confirm against api/main.py and ui/app.py on the latest branch KushalJayavarapu/ML-Hackthon-kushal, claude/project-thread-0jgx9i]]`).
 - Screenshots of the working UI `[[TODO: screenshots]]`
 - Screenshots of API responses in the receiving laptop's command window `[[TODO]]`
 - Run instructions: see `README.md` `[[TODO: confirm it matches what was demonstrated]]`.

@@ -57,7 +57,7 @@ scored on the same trips, so slightly optimistic; top settings within about 0.00
 ## Kushal: models, tuning, UI
 **Q. Which five models and why?** Logistic Regression (simple linear baseline), Random Forest,
 LightGBM (strong on tabular data), MLP (neural, has epoch history), KNN (instance-based).
-Implemented so far: Logistic Regression and LightGBM (`pathsnap/models.py`). Models 2, 4, 5: PENDING.
+All five are in `pathsnap/models.py`. CV Top-1: LightGBM 0.8505, Random Forest 0.8480, MLP 0.8451, KNN 0.8379, LogReg 0.8372.
 **Q. What does the classifier predict?** Binary: is this candidate the true arc? We pick the
 highest probability candidate per GPS point (Top-1).
 **Q. Why GroupKFold by trip?** Points in one trip are strongly related; random splits would put
@@ -71,7 +71,8 @@ ranges, trial count: read `scripts/bayes_opt.py` and `results/models/` trials CS
 vs 0.8856, better in all 5 folds, but the gap is small next to fold spread (about 0.055).
 **Q. Overfitting?** LightGBM train Top-1 0.879 vs validation 0.851 (mild); LogReg train and
 validation nearly equal. Loss curve (fold 0): validation flattens near 0.155 after about 150 trees.
-**Q. Did tuning help?** PENDING. Answer only from the untuned vs tuned table in the report.
+**Q. Did tuning help?** Barely: Optuna (TPE), 40 trials, 3-fold objective; CV Top-1 0.8505 to 0.8510 (+0.0005), well inside the 0.055 fold spread. Default was already near the plateau. Same-data tuning, so mildly optimistic.
+**Q. Why is KNN bad?** It memorises: train Top-1 0.991 and train log loss 0.0000 vs validation log loss 0.2536 (worst), and 312.8 ms per 1,000 rows.
 **Q. Overfitting evidence?** Gap between train and CV score, loss curves for MLP/boosting only.
 **Q. Why no loss curve for Random Forest/KNN?** They have no epoch-by-epoch training; faking one
 is forbidden.
