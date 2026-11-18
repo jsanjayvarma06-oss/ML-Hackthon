@@ -29,8 +29,16 @@ If a task needs a change in someone else's file, do not edit it. Write the reque
 `docs/REQUESTS.md` and tell that person. Hand-off formats live in `docs/CONTRACTS.md`.
 
 ## Git workflow
-- Work on `main`. Before every push: `git pull --rebase`. Commit small and often.
-- Never commit `data/` contents, secrets, or other people's files.
+- Never commit on `main`. For every piece of work, start a new branch from the latest main:
+  `git checkout main && git pull --rebase && git checkout -b <name>/<short-task>`
+  (e.g. `sanjay/features`, `kushal/models`). Push the branch and open a pull request.
+- Commit small and often. Never commit `data/` contents, secrets, or other people's files.
+
+## Test data
+- Do not use `data/raw/student_test` for building, training or tuning anything: features,
+  thresholds, K, label cut-offs, hyperparameters, model choice. Use train (GroupKFold) only.
+- Student-test metrics needed in the report are computed only once at the end, after every
+  choice is frozen, and never fed back into a decision. Ask the team before touching it.
 
 ## Hard rules (from the hackathon PDFs)
 - Evaluator trips (`data/evaluator/`, ids 15 17 23 30 49 59 67 73 87 94) are never used
@@ -64,6 +72,6 @@ python scripts/train_models.py
 python scripts/bayes_opt.py
 python scripts/export_model.py
 python scripts/hmm_eval.py
-PATHSNAP_EVAL_DIR=data/raw/student_test uvicorn api.main:app --host 0.0.0.0 --port 8000
+PATHSNAP_EVAL_DIR=data/raw/train uvicorn api.main:app --host 0.0.0.0 --port 8000
 streamlit run ui/app.py
 ```

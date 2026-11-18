@@ -1,10 +1,12 @@
-"""Cleaning, label and candidate statistics for train and student_test. OWNER: Sanjay.
+"""Cleaning, label and candidate statistics on the 80 train trips. OWNER: Sanjay.
 
 Run from the repo root:  python scripts/candidate_stats.py
 Writes to results/pipeline/:
     trip_stats.csv           per trip: cleaning counts, label coverage, label distance
-    candidate_miss_rate.csv  miss rate for each (partition, K, radius)
+    candidate_miss_rate.csv  miss rate for each (K, radius)
 K=1 with the largest radius is the "nearest arc" baseline (1 - miss rate = its Top-1).
+Settings (K, radius, label cut-off) are chosen from train only; student_test is not
+used for any decision.
 """
 import sys
 import time
@@ -16,7 +18,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from pathsnap import candidates, io, labels  # noqa: E402
-from pathsnap.config import RESULTS_DIR, STUDENT_TEST_DIR, TRAIN_DIR  # noqa: E402
+from pathsnap.config import RESULTS_DIR, TRAIN_DIR  # noqa: E402
 from pathsnap.geo import project_trip  # noqa: E402
 from pathsnap.metrics import UNLABELLED  # noqa: E402
 
@@ -29,7 +31,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     trip_rows, point_rows = [], []
 
-    for part_name, part in [("train", TRAIN_DIR), ("student_test", STUDENT_TEST_DIR)]:
+    for part_name, part in [("train", TRAIN_DIR)]:
         for trip_id in io.list_trips(part):
             t0 = time.perf_counter()
             trip = io.load_trip(part, trip_id)
