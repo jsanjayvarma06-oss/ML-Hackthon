@@ -1,0 +1,13 @@
+feature,mean_correct,mean_wrong,roc_auc,direction,mutual_info,top1_alone
+dist_gap_to_best,0.6253953532062146,19.46322544364847,0.8993,lower = more likely correct,0.1779,0.5536
+dist_rank,0.5936273226903952,3.5734603468686106,0.8938,lower = more likely correct,0.1675,0.5536
+dist_m,6.304555568236028,25.020320087034126,0.8485,lower = more likely correct,0.1127,0.5536
+dist_next_m,7.5556016541466064,27.107974141378655,0.8231,lower = more likely correct,0.0962,0.4724
+dist_prev_m,7.6064428731756015,27.11138237883431,0.8224,lower = more likely correct,0.0945,0.4711
+heading_diff_deg,31.672301576151202,97.44604343158592,0.7969,lower = more likely correct,0.0802,0.4169
+arc_len_m,209.26240503929074,97.05876038215858,0.6859,higher = more likely correct,0.0778,0.2712
+n_candidates,6.411405173165838,7.376865022607388,0.6044,lower = more likely correct,0.0213,
+has_reverse_twin,0.700580127366309,0.7629608572618471,0.5312,lower = more likely correct,0.0013,0.5479
+speed_mps,12.494967209818554,11.872630787791882,0.5151,higher = more likely correct,0.0,
+proj_t,0.5012269005173295,0.4961142623842966,0.5031,higher = more likely correct,0.1353,0.0821
+heading_valid,0.9683110878478584,0.9667096384308713,0.5008,higher = more likely correct,0.0,
