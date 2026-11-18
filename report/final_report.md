@@ -164,20 +164,32 @@ Log loss measures how honest the probabilities are, which matters because the HM
 Source for every filled cell: `results/models/model_comparison.csv` (5-fold GroupKFold CV on train,
 untuned defaults, same folds for every model). Top-1 is mean over folds ± standard deviation. Route
 continuity is computed on out-of-fold classifier-only predictions (no HMM). Inference time is per
-1,000 candidate rows. The Student-test Macro F1 column is a placeholder: the one-time student_test
-run has not been done and waits for the team's go-ahead.
+1,000 candidate rows. The Student-test Macro F1 column comes from the one-time student_test run
+(`results/models/final_student_test.csv`: each model refit on all 80 train trips, scored once on the 10
+student_test trips, 19,132 labelled points, nothing changed afterwards).
 
 | Model | Algorithm family | Key configuration | CV Macro F1 | CV Top-1 | Route continuity | Student-test Macro F1 | CV log loss | Inference time |
 |---|---|---|---|---|---|---|---|---|
-| 1 Logistic Regression | linear / probabilistic | C=1.0, standardised inputs | 0.8856 | 0.8372 ± 0.0569 | 0.9094 | `[[TODO: --final]]` | 0.1622 | 0.15 ms |
-| 2 Random Forest | bagging ensemble | 150 trees, max depth 14, min leaf 20, max features sqrt | 0.9092 | 0.8480 ± 0.0559 | 0.9209 | `[[TODO: --final]]` | 0.1157 | 2.09 ms |
-| 3 LightGBM | boosting | 400 trees, lr 0.05, 31 leaves, min child 50 | 0.9105 | 0.8505 ± 0.0551 | 0.9287 | `[[TODO: --final]]` | 0.1121 | 3.77 ms |
-| 4 MLP | neural network | hidden (64, 32), alpha 1e-4, trained on 100,000 points per fit | 0.9071 | 0.8451 ± 0.0563 | 0.9276 | `[[TODO: --final]]` | 0.1190 | 0.32 ms |
-| 5 KNN (distance-weighted) | instance-based | 25 neighbours, trained on 40,000 points per fit | 0.9021 | 0.8379 ± 0.0549 | 0.9191 | `[[TODO: --final]]` | 0.2536 | 312.8 ms |
-| Baseline: nearest arc | none | K=1 | N/A, not a probabilistic classifier | about 0.554 (1 minus K=1 miss rate 0.446) | 0.8243 | `[[TODO: --final]]` | N/A | N/A |
+| 1 Logistic Regression | linear / probabilistic | C=1.0, standardised inputs | 0.8856 | 0.8372 ± 0.0569 | 0.9094 | 0.8935 | 0.1622 | 0.15 ms |
+| 2 Random Forest | bagging ensemble | 150 trees, max depth 14, min leaf 20, max features sqrt | 0.9092 | 0.8480 ± 0.0559 | 0.9209 | 0.9157 | 0.1157 | 2.09 ms |
+| 3 LightGBM | boosting | 400 trees, lr 0.05, 31 leaves, min child 50 | 0.9105 | 0.8505 ± 0.0551 | 0.9287 | 0.9167 | 0.1121 | 3.77 ms |
+| 4 MLP | neural network | hidden (64, 32), alpha 1e-4, trained on 100,000 points per fit | 0.9071 | 0.8451 ± 0.0563 | 0.9276 | 0.9129 | 0.1190 | 0.32 ms |
+| 5 KNN (distance-weighted) | instance-based | 25 neighbours, trained on 40,000 points per fit | 0.9021 | 0.8379 ± 0.0549 | 0.9191 | 0.9073 | 0.2536 | 312.8 ms |
+| Baseline: nearest arc | none | K=1 | N/A, not a probabilistic classifier | about 0.554 train (student-test 0.5351) | 0.8243 train (student-test 0.8209) | N/A | N/A | N/A |
 
-The tuned LightGBM is reported in section 4. Student-test Top-1 and log loss will be added from
-`results/models/final_student_test.csv` when that run is done.
+**Student-test results (partition: student_test, 10 trips; `results/models/final_student_test.csv`).**
+Top-1 is observation level (best candidate per GPS point), Macro F1 and log loss are on the candidate yes/no label.
+
+| Model | Top-1 | Macro F1 | Log loss | Route continuity (classifier only) | Inference ms / 1,000 rows |
+|---|---|---|---|---|---|
+| Logistic Regression | 0.8466 | 0.8935 | 0.1517 | 0.9286 | 0.24 |
+| Random Forest | 0.8596 | 0.9157 | 0.1065 | 0.9338 | 2.44 |
+| LightGBM (untuned) | 0.8634 | 0.9167 | 0.1020 | 0.9407 | 4.19 |
+| LightGBM (tuned) | 0.8630 | 0.9164 | 0.1023 | 0.9398 | 5.71 |
+| MLP | 0.8558 | 0.9129 | 0.1079 | 0.9382 | 0.36 |
+| KNN (distance-weighted) | 0.8460 | 0.9073 | 0.2284 | 0.9312 | 332.74 |
+
+The ordering matches the train CV ordering at the top (LightGBM first, tree models and MLP close, LogReg and KNN behind). All scores are a little higher than in CV; with only 10 student_test trips and a fold spread of about 0.055 in CV, we do not read anything into that difference.
 
 **Model selection (decided on CV only, before any student_test run).** Rule written before tuning
 in `scripts/bayes_opt.py`: highest CV Top-1, ties within 0.002 broken by lower log loss.
@@ -197,41 +209,41 @@ mean train vs validation over the 5 folds (`cv_folds.csv`).
 - **A1 Why suitable?** Simplest model that outputs a probability for "is this candidate the true arc?"; a fair baseline, and probabilities usable as HMM emissions. Inputs are standardised because features have different units.
 - **A2 Strengths / limitations:** Fast (1.7 s per fold) and stable, but linear, so it cannot express "close AND same direction". It trails the non-linear models on every metric.
 - **B5 Hyperparameters:** C=1.0, no class weight, lbfgs, max_iter 1000, seed 42. **B6 Objective:** log loss with L2 regularisation.
-- **C7 to C8 Student-test:** `[[TODO: --final]]`
+- **C7 to C8 Student-test:** Top-1 0.8466, Macro F1 0.8935, log loss 0.1517 (`final_student_test.csv`). Slightly below the other models on all three; the same linear-model limit seen in CV.
 - **C9 Fit:** train Top-1 0.8376 vs validation 0.8372; train log loss 0.1596 vs 0.1622. No overfitting; the model is limited by its linear form (mild underfitting).
 
 **Model 2: Random Forest**
 - **A1 Why suitable?** Many decorrelated trees average out noise and capture non-linear rules without scaling.
 - **A2 Strengths / limitations:** Close to LightGBM (Top-1 within 0.003) but about 4 times slower to fit (37 s per fold).
 - **B5 Hyperparameters:** 150 trees, max depth 14, min samples per leaf 20, max features sqrt, max_samples 0.5, seed 42. **B6 Objective:** Gini impurity per tree; probabilities from tree voting.
-- **C7 to C8 Student-test:** `[[TODO: --final]]`
+- **C7 to C8 Student-test:** Top-1 0.8596, Macro F1 0.9157, log loss 0.1065. Close to LightGBM and consistent with CV.
 - **C9 Fit:** train Top-1 0.8622 vs validation 0.8480; train log loss 0.1021 vs 0.1157. Mild overfitting, limited by the depth and leaf-size settings.
 
 **Model 3: LightGBM (untuned)**
 - **A1 Why suitable?** Features interact (a close arc with the wrong heading is wrong); boosted trees learn such rules, need no scaling and are fast on 1.19 million rows.
 - **A2 Strengths / limitations:** Best CV Top-1 and log loss. 9.7 s per fold to fit, 3.77 ms per 1,000 rows to predict. Mild overfitting.
 - **B5 Hyperparameters:** 400 trees, lr 0.05, 31 leaves, min child samples 50, subsample 0.8, colsample 0.8, reg_lambda 1.0, seed 42. **B6 Objective:** binary log loss via gradient boosting.
-- **C7 to C8 Student-test:** `[[TODO: --final]]`
+- **C7 to C8 Student-test:** Top-1 0.8634, Macro F1 0.9167, log loss 0.1020, the best of all six runs on all three metrics. Consistent with its CV ranking, and train-validation gap in CV suggested only mild overfitting.
 - **C9 Fit:** train Top-1 0.8788 vs validation 0.8505; train log loss 0.0913 vs 0.1121 (mild overfit). Loss curve (CV fold 0 only, `plots/loss_curve_lightgbm.png`): validation loss flattens near 0.155 from about iteration 150 while training loss keeps falling to about 0.083.
 
 **Model 4: MLP (neural network)**
 - **A1 Why suitable?** A neural-network family member that can learn non-linear combinations of the 13 features and has a real epoch history.
 - **A2 Strengths / limitations:** Competitive (Top-1 0.8451) and fast at prediction (0.32 ms per 1,000 rows), but not better than boosting on tabular features. Trained on a fixed 100,000-point subsample per fit for compute reasons (validation folds are never subsampled).
 - **B5 Hyperparameters:** hidden layers (64, 32), alpha (L2) 1e-4, constant learning rate, early stopping, seed 42. **B6 Objective:** log loss (cross-entropy), optimised by gradient descent.
-- **C7 to C8 Student-test:** `[[TODO: --final]]`
+- **C7 to C8 Student-test:** Top-1 0.8558, Macro F1 0.9129, log loss 0.1079. Close to Random Forest.
 - **C9 Fit:** train Top-1 0.8563 vs validation 0.8451; train log loss 0.1082 vs 0.1190. Small gap, mild overfit. Loss curve: `plots/loss_curve_mlp.png` (CV fold 0). Training loss drops quickly in the first 2 epochs then flattens at about 0.10 over about 27 epochs. The orange line in that plot is the MLP's validation **score** (an accuracy-type value near 0.95), not a loss, so it must not be read as a loss curve. (The lead reports the plot was redrawn from a real re-run with validation accuracy on its own right-hand axis and identical CV numbers; confirm by viewing the final PNG.)
 
 **Model 5: KNN (distance-weighted)**
 - **A1 Why suitable?** An instance-based method with no training assumptions; included as a different family for comparison.
 - **A2 Strengths / limitations:** Cheapest to fit (0.4 s) but the slowest to predict (312.8 ms per 1,000 rows) and its probabilities are poorly calibrated, which makes it a weak HMM emission. Trained on a fixed 40,000-point subsample per fit.
 - **B5 Hyperparameters:** 25 neighbours, distance weighting, standardised inputs. **B6 Objective:** none (no training loss); it votes among neighbours.
-- **C7 to C8 Student-test:** `[[TODO: --final]]`
+- **C7 to C8 Student-test:** Top-1 0.8460, Macro F1 0.9073, log loss 0.2284. Log loss is by far the worst, matching the overconfident memorising behaviour seen in CV.
 - **C9 Fit:** strong overfitting: train Top-1 0.9908 and train log loss 0.0000 (each training point is its own nearest neighbour) against validation Top-1 0.8379 and log loss 0.2536, the worst of all models.
 
 ### 3.3 Model visualisations (all from real runs)
 - CV Macro F1, all five models: `results/models/plots/cv_f1_macro.png`; CV Top-1: `cv_top1.png`.
 - Log loss comparison: `results/models/plots/cv_log_loss.png` (CV values).
-- Student-test Top-1 and Macro F1 comparison, confusion matrices: `[[TODO: after the --final run]]`.
+- Student-test Top-1 and Macro F1: `results/models/plots/student_test_top1_f1.png`; log loss: `student_test_log_loss.png`; confusion matrices (optional): `results/models/plots/confusion_<model>.png` for all six runs.
 - Loss curves, only for models with real iteration histories: LightGBM `plots/loss_curve_lightgbm.png` (and `loss_curve_lightgbm_tuned.png`), MLP `plots/loss_curve_mlp.png`. None for Logistic Regression, Random Forest or KNN.
 
 ---
@@ -251,8 +263,8 @@ where "good" is most likely, so it needs far fewer trials than a grid search.
 
 | | CV Macro F1 | CV Top-1 | CV log loss | Train Top-1 | Route continuity (OOF) | Student-test Top-1 | Student-test Macro F1 | Inference time |
 |---|---|---|---|---|---|---|---|---|
-| Untuned | 0.9105 | 0.8505 | 0.1121 | 0.8788 | 0.9287 | `[[TODO: --final]]` | `[[TODO: --final]]` | 3.77 ms / 1,000 rows |
-| Tuned | 0.9111 | 0.8510 | 0.1116 | 0.8762 | 0.9282 | `[[TODO: --final]]` | `[[TODO: --final]]` | 5.33 ms / 1,000 rows (`cv_folds_tuned.csv`; machine load may differ) |
+| Untuned | 0.9105 | 0.8505 | 0.1121 | 0.8788 | 0.9287 | 0.8634 | 0.9167 | 3.77 ms CV, 4.19 ms student-test run |
+| Tuned | 0.9111 | 0.8510 | 0.1116 | 0.8762 | 0.9282 | 0.8630 | 0.9164 | 5.33 ms CV, 5.71 ms student-test run (`cv_folds_tuned.csv`, `final_student_test.csv`) |
 
 **Plain reading:** tuning improved CV Top-1 by only +0.0005, far inside the fold spread (about
 0.055), so it is not a meaningful gain. Most trials landed near 0.849, which suggests the default
@@ -260,12 +272,11 @@ LightGBM was already near the plateau for these 13 features. The visible benefit
 smaller train-validation gap (train Top-1 0.8788 to 0.8762). Bigger improvements are more likely to
 come from features or the HMM than from hyperparameters. Caveat: tuning and the comparison used the
 same 80 train trips and no nested cross-validation, so the tuned figure is mildly optimistic.
-The model chosen for the system is `lightgbm_tuned`.
+**Student-test confirms this: tuning did not help.** Untuned LightGBM scores Top-1 0.8634, F1 0.9167, log loss 0.1020; tuned scores 0.8630, 0.9164, 0.1023, i.e. tuned is 0.0004 *worse* on Top-1, and also slower to predict (5.71 vs 4.19 ms per 1,000 rows). Both differences are tiny and well inside noise, so the honest conclusion is "tuning made no measurable difference on this task". The system uses `lightgbm_tuned` because that was decided on CV before the student_test run, and we did not switch after seeing student_test (it must never drive a choice); either model would perform the same.
 
 ---
 
 ## 5. HMM and Viterbi route reconstruction
-> **Tuned-model update (from the lead thread's re-run, `results/pipeline/EXPERIMENTS.md` entry E3; as confirmed by the lead: `results/pipeline/hmm_comparison.csv` rows classifier_only 0.85078 / 0.94410 and classifier_hmm 0.93878 / 0.98088):** with out-of-fold probabilities from the tuned LightGBM, classifier-only is 0.8508 Top-1 / 0.9441 continuity and classifier + HMM is 0.9388 / 0.9809, with unchanged HMM parameters (beta 10, floor 25, weight 0.1). The tables below show the untuned-model run in `hmm_comparison.csv`; use the tuned numbers for the final model.
 Plain-language idea: the classifier judges each GPS point alone and can jump between roads, or
 pick the wrong direction of a two-way road. A real vehicle cannot teleport, so we look for the
 single best *whole* chain of arcs. Viterbi is the dynamic-programming method that finds that
@@ -293,36 +304,47 @@ All numbers: `results/pipeline/hmm_comparison.csv`, `hmm_params.json`, `hmm_grid
    weight 0.1; distance+HMM uses beta 50, floor 50, emission weight 0.25 (`hmm_params.json`).
    Caveat: these were tuned and scored on the same 80 train trips, so the HMM numbers are slightly
    optimistic. The top few grid settings are within about 0.001 Top-1 of each other, so the result
-   is not sensitive to the exact values. The honest check is the one-time student_test run.
+   is not sensitive to the exact values. The one-time student_test run is the independent check (results below).
 
-**Did HMM decoding improve the final route?** Train, 80 trips, 185,107 labelled points, out-of-fold
-LightGBM probabilities (pooled over points; `hmm_comparison.csv`):
+**Did HMM decoding improve the final route?** The classifier here is the tuned LightGBM (the final
+model). Train = 80 trips, 185,107 labelled points, out-of-fold probabilities
+(`results/pipeline/hmm_comparison.csv`). Student-test = 10 trips, 19,132 labelled points, scored once
+(`results/pipeline/hmm_comparison_student_test.csv`). Pooled over points.
 
-| Method | Top-1 | Route continuity | Student-test Top-1 | Student-test continuity |
+| Method | Train Top-1 | Train continuity | Student-test Top-1 | Student-test continuity |
 |---|---|---|---|---|
-| Nearest arc (distance only) | 0.5536 | 0.8243 | `[[TODO --final]]` | `[[TODO --final]]` |
-| Distance emission + HMM (no ML) | 0.9289 | 0.9813 | `[[TODO --final]]` | `[[TODO --final]]` |
-| Classifier only (LightGBM) | 0.8502 | 0.9442 | `[[TODO --final]]` | `[[TODO --final]]` |
-| Classifier + HMM | 0.9390 | 0.9809 | `[[TODO --final]]` | `[[TODO --final]]` |
+| Nearest arc (distance only) | 0.5536 | 0.8243 | 0.5351 | 0.8209 |
+| Distance emission + HMM (no ML) | 0.9289 | 0.9813 | 0.9368 | 0.9809 |
+| Classifier only (tuned LightGBM) | 0.8508 | 0.9441 | 0.8630 | 0.9431 |
+| Classifier + HMM | 0.9388 | 0.9809 | 0.9214 | 0.9818 |
 
 What this shows, stated honestly:
-- **Most of the gain comes from the HMM, not the classifier.** The HMM lifts the classifier from
-  0.850 to 0.939 Top-1 (+8.9 points) and route continuity from 0.944 to 0.981. A distance-only HMM
-  with no machine learning at all already reaches 0.929 Top-1 and 0.981 continuity.
-- **The classifier adds about 1 point on top of the HMM** (0.939 vs 0.929 Top-1), and no gain in
-  continuity (0.9809 vs 0.9813). The tuned emission weight is small (0.1), meaning the HMM gives
-  the classifier's opinion little weight relative to the road-connection model. We should not
-  overstate the classifier's role: the work that matters most here is candidate generation,
-  heading features (which help the classifier itself) and the transition model.
-- **Per trip (80 trips):** classifier+HMM beats classifier-only on 79 trips and is worse on one.
-  Biggest gains: trip 2 (0.584 to 0.891), trip 8 (0.603 to 0.863), trip 33 (0.476 to 0.724),
-  trip 21 (0.776 to 0.994). Median gain per trip is about 4.7 points. Classifier+HMM beats
-  distance+HMM on 61 trips and is worse on 17.
-- **Where HMM did not help:** trip 63 got worse with the HMM (0.846 to 0.829), and on 17 trips the
-  distance-only HMM was better than classifier+HMM, so the classifier's probabilities sometimes
-  pull the path the wrong way. `[[TODO: look at trip 63 (and trip 33, still only 0.724) on a Folium
-  map and state the cause only after seeing it. Do not guess.]]`
-- Unlabelled points (about 11% of kept points, section 2.2.2) are not scored.
+- **Most of the gain comes from the HMM, not the classifier.** On student-test the HMM lifts the
+  classifier from 0.863 to 0.921 Top-1 (+5.8 points) and continuity from 0.943 to 0.982. On train
+  the lift is 0.851 to 0.939 (+8.8 points). A distance-only HMM with no machine learning at all
+  reaches 0.937 Top-1 and 0.981 continuity on student-test.
+- **On student-test the distance-only HMM beat classifier + HMM by 1.5 points of Top-1 (0.9368 vs
+  0.9214).** This reverses the train ordering, where classifier + HMM led by about 1 point (0.9388 vs
+  0.9289). Continuity is essentially tied (0.9818 vs 0.9809). We did not change anything because of
+  this (student_test must not drive a choice), so the submitted system still uses the classifier
+  emission. What we can and cannot say: with only 10 student_test trips and a large trip-to-trip
+  spread, a 1.5 point difference may be noise, but it does mean we **cannot claim the classifier
+  improves the final route once the HMM is applied**. The HMM's tuned emission weight on the
+  classifier is small (0.1) and the classifier's advantage over the distance model was only about 1
+  point on train, so a reversal on a different set of trips is plausible. We have not diagnosed why;
+  `[[TODO: per-trip student_test files do not exist, so this cannot be broken down yet; do not
+  guess a cause]]`.
+- **Where the classifier alone is good:** it is clearly better than the nearest-arc baseline (0.863
+  vs 0.535 on student-test), which is mostly the heading features separating the two directions of a
+  two-way road. The final route quality, however, is driven mainly by the transition model.
+- **Train, per trip (80 trips, tuned OOF, `hmm_per_trip_*.csv`):** classifier + HMM beats
+  classifier-only on 78 trips and is worse on 2: trip 63 (0.845 to 0.827) and trip 39 (0.959 to
+  0.953). Median gain per trip is about 4.8 points. Biggest gains: trip 2 (0.587 to 0.888), trip 8
+  (0.601 to 0.859), trip 33 (0.483 to 0.724), trip 21 (0.782 to 0.994). Classifier + HMM beats
+  distance + HMM on 63 trips and is worse on 16. On trip 63 the distance-only HMM is better (0.954).
+  The cause for trips 63 and 33 (still only 0.724) is not yet known; `[[TODO: view
+  results/maps/trip_00000063.html and state a cause only after looking]]`.
+- Unlabelled points (about 11% of kept points on train, section 2.2.2) are not scored.
 
 Folium map showing classifier-only vs classifier+HMM on one trip: `[[TODO: results/maps/trip_<id>.html
 and screenshot]]`.
