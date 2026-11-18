@@ -46,6 +46,9 @@ def get_bundle():
 def _startup():
     log.info("eval_dir=%s (exists=%s) model_file=%s (exists=%s)",
              EVAL_DIR, EVAL_DIR.exists(), MODEL_PATH, MODEL_PATH.exists())
+    # Load the model now, so the evaluator's first /predict is not slowed down by it.
+    if MODEL_PATH.exists():
+        get_bundle()
 
 
 class PredictRequest(BaseModel):

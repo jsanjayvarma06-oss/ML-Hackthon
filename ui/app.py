@@ -132,7 +132,10 @@ if result and result["trip_id"] == trip_id:
     c5.metric("Total time", "N/A" if total is None else f"{total:,.0f} ms",
               help="Pipeline time on Laptop 1.")
 
-    st_folium(make_result_map(result), height=600, use_container_width=True, returned_objects=[])
+    fmap = make_result_map(result)
+    # center/zoom passed explicitly: st_folium does not always apply the map's fit_bounds
+    st_folium(fmap, center=fmap.location, zoom=fmap.options.get("zoom"), height=600,
+              use_container_width=True, returned_objects=[])
 
     if timing:
         st.markdown("**Time per step on Laptop 1**")
