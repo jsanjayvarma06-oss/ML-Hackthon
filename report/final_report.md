@@ -219,7 +219,7 @@ mean train vs validation over the 5 folds (`cv_folds.csv`).
 - **A2 Strengths / limitations:** Competitive (Top-1 0.8451) and fast at prediction (0.32 ms per 1,000 rows), but not better than boosting on tabular features. Trained on a fixed 100,000-point subsample per fit for compute reasons (validation folds are never subsampled).
 - **B5 Hyperparameters:** hidden layers (64, 32), alpha (L2) 1e-4, constant learning rate, early stopping, seed 42. **B6 Objective:** log loss (cross-entropy), optimised by gradient descent.
 - **C7 to C8 Student-test:** `[[TODO: --final]]`
-- **C9 Fit:** train Top-1 0.8563 vs validation 0.8451; train log loss 0.1082 vs 0.1190. Small gap, mild overfit. Loss curve: `plots/loss_curve_mlp.png` (CV fold 0). Training loss drops quickly in the first 2 epochs then flattens at about 0.10 over about 27 epochs. The orange line in that plot is the MLP's validation **score** (an accuracy-type value near 0.95), not a loss, so it must not be read as a loss curve. `[[TODO: ask Kushal to relabel or split this axis before it goes in the PDF]]`
+- **C9 Fit:** train Top-1 0.8563 vs validation 0.8451; train log loss 0.1082 vs 0.1190. Small gap, mild overfit. Loss curve: `plots/loss_curve_mlp.png` (CV fold 0). Training loss drops quickly in the first 2 epochs then flattens at about 0.10 over about 27 epochs. The orange line in that plot is the MLP's validation **score** (an accuracy-type value near 0.95), not a loss, so it must not be read as a loss curve. (The lead reports the plot was redrawn from a real re-run with validation accuracy on its own right-hand axis and identical CV numbers; confirm by viewing the final PNG.)
 
 **Model 5: KNN (distance-weighted)**
 - **A1 Why suitable?** An instance-based method with no training assumptions; included as a different family for comparison.
@@ -265,7 +265,7 @@ The model chosen for the system is `lightgbm_tuned`.
 ---
 
 ## 5. HMM and Viterbi route reconstruction
-> **Tuned-model update (from the lead thread's re-run, `results/pipeline/EXPERIMENTS.md` entry E3; `[[TODO: verify these two rows against that file once it is applied]]`):** with out-of-fold probabilities from the tuned LightGBM, classifier-only is 0.8508 Top-1 / 0.9441 continuity and classifier + HMM is 0.9388 / 0.9809, with unchanged HMM parameters (beta 10, floor 25, weight 0.1). The tables below show the untuned-model run in `hmm_comparison.csv`; use the tuned numbers for the final model.
+> **Tuned-model update (from the lead thread's re-run, `results/pipeline/EXPERIMENTS.md` entry E3; as confirmed by the lead: `results/pipeline/hmm_comparison.csv` rows classifier_only 0.85078 / 0.94410 and classifier_hmm 0.93878 / 0.98088):** with out-of-fold probabilities from the tuned LightGBM, classifier-only is 0.8508 Top-1 / 0.9441 continuity and classifier + HMM is 0.9388 / 0.9809, with unchanged HMM parameters (beta 10, floor 25, weight 0.1). The tables below show the untuned-model run in `hmm_comparison.csv`; use the tuned numbers for the final model.
 Plain-language idea: the classifier judges each GPS point alone and can jump between roads, or
 pick the wrong direction of a two-way road. A real vehicle cannot teleport, so we look for the
 single best *whole* chain of arcs. Viterbi is the dynamic-programming method that finds that
@@ -334,7 +334,7 @@ Maps are produced by `pathsnap.viz.trip_map` (report maps: GPS, nearby roads, re
 predicted route, with legend and layer control) and `ui/map_view.make_result_map` (UI: GPS and
 predicted route only; the reference route is never shown there).
 Maps present in the repo now: `results/maps/trip_00000005.html`, `trip_00000039.html`,
-`trip_00000046.html`. Add at least one screenshot: `[[TODO: screenshot of results/maps/trip_<id>.html,
+`trip_00000046.html`. Report maps with predicted routes now exist for trips 5, 39, 46 and 63 (`results/maps/trip_00000005.html`, `trip_00000039.html`, `trip_00000046.html`, `trip_00000063.html`). **These trips are in the train set, so the predictions on them are in-sample and must be labelled that way in the caption.** Add at least one screenshot: `[[TODO: screenshot of results/maps/trip_<id>.html,
 state partition]]`. Include one good case and one failure case.
 
 ## 7. API, UI and deployment
@@ -342,7 +342,7 @@ state partition]]`. Include one good case and one failure case.
   on Laptop 2 (`ui/app.py`), reached over the same network. The API runs the full pipeline live
   on the chosen trip; the reference route is read only to compute the accuracy and is never sent
   to the UI.
-- Model picker and comparison page: the UI lets the evaluator choose which trained model runs and has a "Model comparison" page. The API serves them through `GET /models` and `GET /comparison` (as reported by the lead thread; `[[TODO: confirm against api/main.py and ui/app.py on the latest branch KushalJayavarapu/ML-Hackthon-kushal, claude/project-thread-0jgx9i]]`).
+- Model picker and comparison page: the UI lets the evaluator choose which trained model runs and has a "Model comparison" page. The API serves them through `GET /models` and `GET /comparison` (`api/main.py`: `GET /models`, `GET /comparison`, and an optional `model` field in `POST /predict`; `ui/app.py`: a sidebar "Page" selector with a "Model comparison" page and a model selectbox under the trip selector). `[[TODO: re-read both files on the final branch once more before submission]]`.
 - Screenshots of the working UI `[[TODO: screenshots]]`
 - Screenshots of API responses in the receiving laptop's command window `[[TODO]]`
 - Run instructions: see `README.md` `[[TODO: confirm it matches what was demonstrated]]`.
