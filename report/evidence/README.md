@@ -2,7 +2,7 @@
 
 Everything here is built from files that already exist in `results/`. No model was retrained and
 neither `student_test` nor `evaluator_test` was re-run to make this pack. Tables are rendered
-images of the CSV values (rounded to 4 decimals); the full-precision CSVs are in `csv/`.
+images of the CSV values (rounded to 4 decimals); the full-precision source CSVs reside in `results/`.
 Map screenshots are headless-Chrome captures of the saved Folium HTML in `results/maps/`.
 
 ## Caveats (read before quoting any number)
