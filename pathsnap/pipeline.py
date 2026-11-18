@@ -55,13 +55,17 @@ def predict_trip(trip, bundle):
     if bundle is not None and "model" in bundle and len(df):
         cols = bundle["feature_columns"]
         prob = bundle["model"].predict_proba(df[cols])[:, 1]
-        emission = hmm.classifier_emission(split_by_point(df, prob, cand_arcs, keep_idx), params)
+        emission = hmm.mixed_emission(split_by_point(df, prob, cand_arcs, keep_idx), cand_dist, params)
     else:
         emission = hmm.distance_emission(cand_dist, params)
     t2 = time.perf_counter()
 
     n = len(trip.track)
-    pred_clf = hmm.argmax_arcs(cand_arcs, emission, keep_idx, n)
+    # classifier-only baseline: argmax of the classifier probability (no distance term, no HMM)
+    if bundle is not None and "model" in bundle and len(df):
+        pred_clf = hmm.argmax_arcs(cand_arcs, split_by_point(df, prob, cand_arcs, keep_idx), keep_idx, n)
+    else:
+        pred_clf = hmm.argmax_arcs(cand_arcs, emission, keep_idx, n)
     pred = hmm.viterbi(cand_arcs, emission, trip, txy, keep_idx, segment_id, params)
     t3 = time.perf_counter()
     return {
