@@ -1,72 +1,94 @@
-# Work split: Sanjay, Kushal, Samarth
+# Work split: 3 parallel groups (from 11:45, 18 Nov)
 
-Each person owns different files (see the ownership table in `CLAUDE.md`), so nobody edits
-the same file. Hand-offs happen only through the formats in `docs/CONTRACTS.md`.
-Jagdeesh: viva prep, report proofreading, testing the two-laptop demo with Samarth.
+Three groups, each owning different files (ownership table in `CLAUDE.md`), so nobody
+edits the same file. Everyone can start right now. Hand-offs happen only through the
+formats in `docs/CONTRACTS.md`, merged to `main` through pull requests.
+Jagdeesh helps Group C with EDA plots, screenshots, the report and viva prep.
 
-Order of dependency: Sanjay's candidate table → Kushal's models → Sanjay's HMM pipeline → Samarth's API/UI.
-Nobody waits: each person has independent work to do first.
+**Already done on main:** loader, metrics, geo, track cleaning, candidates, route labels,
+candidate stats (`results/pipeline/`), UI map + report maps, Streamlit UI (`ui/app.py`),
+API skeleton.
 
----
+## Hand-off timeline (everyone works toward these)
 
-## Sanjay: data pipeline + HMM  (the critical path)
+| Time | From → To | What lands on `main` |
+|---|---|---|
+| 12:15 | A → B | `features.py` v1 + `build_dataset.py`. B runs it to get the parquet files |
+| 12:40 | A → C | `hmm.py` + `pipeline.predict_trip` with distance-only emission. The API works end to end |
+| 14:15 | B → A | `artifacts/model.joblib` (untuned) + out-of-fold probabilities on train |
+| 15:00 | B → A | tuned `artifacts/model.joblib` |
+| **15:30** | **FREEZE** | No more choices. Each group runs its one `--final` student_test evaluation and commits the results |
+| 15:50 | A, B → C | report sections |
+| 16:15 | C | PDF done, repo public, both laptops set up |
 
-**Before Round 1 (11:30)**
-1. `geo.py`: lon/lat → local metres, point-to-segment distance, bearing.
-2. `candidates.py`: `clean_track` (sort, dedupe, speed spikes, gap splits) and `generate_candidates` with a spatial index.
-3. `labels.py`: route → per-point labels by ordered alignment.
-4. Number for Round 1: candidate miss rate on train (done: 0.92% at K=8, 75 m).
-5. Maps (done): `ui/map_view.py` (UI map: GPS blue, predicted red, start/end, no reference route) and `viz.trip_map` + `scripts/make_report_maps.py` (report maps in `results/maps/trip_*.html`). Rerun the script once the model exists to add the red predicted route.
-
-**After Round 1**
-
-6. `features.py` + `scripts/build_dataset.py`: write both parquet files. **Push as soon as it runs, and tell Kushal.**
-7. `hmm.py`: Viterbi with a distance-only emission first (works before any model exists).
-8. `pipeline.py`: `predict_trip`. Switch to the real model once `artifacts/model.joblib` is pushed.
-9. `scripts/hmm_eval.py`: classifier-only vs HMM table (develop on train folds; run on student_test once at the end), plus 2–3 maps.
-10. Report: `report/hmm_and_data_pipeline.md` (preprocessing, candidates, labels and their limits, features, HMM answers 1–6).
-
-## Kushal: models + Bayesian optimisation
-
-**Before Round 1 (11:30)**
-1. `models.py`: the 5 models (Logistic Regression, Random Forest, LightGBM, MLP, KNN), with scalers in Pipelines and `SEED` everywhere.
-2. `scripts/train_models.py`: GroupKFold training, metrics, CSV writer, plots. Test it on a tiny fake table with the contract columns while Sanjay's real table is not ready (don't commit the fake data).
-
-**After Round 1**
-
-3. Pull, run `python scripts/build_dataset.py`, then train all 5 on real data → `results/models/model_comparison.csv` + plots (CV F1, student-test Top-1/F1, log loss, time; MLP loss curve only).
-4. Pick the model with numbers. `scripts/bayes_opt.py`: Optuna, 30–50 trials, all trials to CSV, tuned vs untuned table.
-5. `scripts/export_model.py`: write `artifacts/model.joblib`. **Push and tell Sanjay.**
-6. Optional extra: LightGBM ranker (`lambdarank`) as a 6th experiment.
-7. Report: `report/models_and_tuning.md` (comparison table, per-model questions A–C, Bayesian section 1–6).
-
-## Samarth: EDA + maps + API + UI + final report
-
-**Before Round 1 (11:30)**
-1. `scripts/eda.py` (or `notebooks/01_eda.ipynb`): trip inventory table, missing values and gaps, sampling intervals, network size and components, coordinate plots.
-2. For EDA maps, call Sanjay's `pathsnap.viz.trip_map(trip, route=route)` and save as `results/maps/eda_<trip>.html`. Don't write new map code.
-3. Check that the API starts: `PATHSNAP_EVAL_DIR=data/raw/train uvicorn api.main:app --host 0.0.0.0 --port 8000`, then `/trips` from the UI on another laptop over a phone hotspot.
-
-**After Round 1**
-
-4. `ui/app.py`: trip dropdown and metrics. For the map, add after the metrics:
-   `from streamlit_folium import st_folium`, `from map_view import make_result_map`,
-   `st_folium(make_result_map(result), height=600, use_container_width=True)`.
-5. Polish `api/main.py`: logs, error messages, timing. Test end to end on train trips while developing.
-6. `README.md`: install, run and two-laptop deployment steps. Screenshots of the UI and API logs.
-7. Report: `report/eda_maps_api_ui.md`, then combine all three sections into the final PDF, plus an AI-use disclosure.
+Lunch 12:45, leadership address 13:30 (at the venue by 13:15). Push before you leave.
 
 ---
 
-## Round 1 (11:30) checklist
-- [ ] Repo has commits from all three accounts
-- [ ] EDA table + one Folium map (Samarth)
-- [ ] Candidate miss rate (Sanjay)
-- [ ] Model code runs on a sample (Kushal)
-- [ ] API `/trips` reachable from a second laptop (Samarth)
+## Group A: Sanjay, data → route
+
+Files: `pathsnap/features.py`, `hmm.py`, `pipeline.py`, `viz.py`, `ui/map_view.py`,
+`scripts/build_dataset.py`, `scripts/hmm_eval.py`, `scripts/make_report_maps.py`,
+`report/hmm_and_data_pipeline.md`
+
+1. **features v1 (by 12:15):** `dist_m`, `dist_rank`, `dist_gap_to_best`, `heading_diff_deg`,
+   `arc_len_m`, `proj_t`, `speed_mps`, `n_candidates`, `has_reverse_twin`.
+   `build_dataset.py` writes `train.parquet` and `student_test.parquet`.
+   Branch `sanjay/features`, PR, merge, tell Kushal.
+2. **HMM + pipeline v0 (by 12:40):** Viterbi with distance-only emission, transitions from
+   connectivity + network distance, split at gaps. `predict_trip` returns the contract keys.
+   Merge, tell Samarth.
+3. **After lunch:** plug in Kushal's model. Tune the HMM parameters on his out-of-fold train
+   probabilities only. `hmm_eval.py` compares classifier-only vs HMM on train (CV).
+4. Optional: features v2 (more features, same table format). Only before 14:15.
+5. **15:30:** `python scripts/hmm_eval.py --final` → `results/pipeline/final_hmm_vs_classifier.csv`.
+   Rerun `make_report_maps.py` so the maps show the red predicted route.
+6. Report section: preprocessing, candidates, labels and their limits, features, HMM questions 1–6.
+
+## Group B: Kushal, models
+
+Files: `pathsnap/models.py`, `scripts/train_models.py`, `scripts/bayes_opt.py`,
+`scripts/export_model.py`, `artifacts/`, `ui/app.py`, `ui/requirements.txt`,
+`report/models_and_tuning.md`
+
+1. **Now (before features land):** `models.py` with 5 models (Logistic Regression, Random
+   Forest, LightGBM, MLP, distance-weighted KNN), scalers in Pipelines, `SEED`.
+   `train_models.py` with GroupKFold by `trip_id` on train, using
+   `metrics.classification_report` and `metrics.top1_from_table`, plus timings and plots.
+   Test on a small fake table with the contract columns; don't commit it.
+2. **12:15:** pull main, run `build_dataset.py`, train all 5 for real →
+   `results/models/model_comparison.csv` + plots (CV macro F1, CV Top-1, log loss, train and
+   inference time; loss curve only for the MLP).
+3. **Before 14:15:** pick the model on CV numbers. Write out-of-fold probabilities
+   (contract 5) and an untuned `artifacts/model.joblib`. Merge, tell Sanjay.
+4. **Before 15:00:** `bayes_opt.py` (Optuna, at least 30 trials, objective = CV score on train),
+   `optuna_trials.csv`, tuned vs untuned on CV. Export the tuned model. Merge, tell Sanjay.
+5. **15:30:** `python scripts/train_models.py --final` → the student-test columns of the
+   comparison table (all 5 models + tuned) in `results/models/final_student_test.csv`.
+6. Report section: comparison table, the per-model questions A–C, Bayesian questions 1–6.
+
+## Group C: Samarth (+ Jagdeesh), EDA, API, deployment, report
+
+Files: `scripts/eda.py`, `notebooks/`, `api/`, `README.md`, `report/eda_maps_api_ui.md`,
+`report/final/`
+
+1. **Now:** `eda.py` on **train**: inventory table, sampling intervals, gaps, speed spikes,
+   network size and components, coordinate plots → `results/eda/`. EDA maps via
+   `viz.trip_map(trip, route=route)` → `results/maps/eda_<trip>.html`.
+2. **Now:** API: add the model name to `/health` (request in `docs/REQUESTS.md`). Test
+   `/trips` and `/predict` with `PATHSNAP_EVAL_DIR=data/raw/train` as soon as Sanjay's
+   pipeline v0 lands (about 12:40).
+3. **Two laptops:** phone hotspot, firewall prompt for port 8000, UI on laptop 2 reaching the
+   API on laptop 1. Write the steps in `README.md`. Screenshots of the UI and the API terminal logs.
+4. **Demo-day folder:** know how to point `PATHSNAP_EVAL_DIR` at the evaluator trips and
+   check that all of them load.
+5. **Report:** collect the three sections into `report/final/`, add the AI-use disclosure,
+   build the PDF. Every number must match a file in `results/`. Make the repo public before 16:30.
+
+---
 
 ## Final (16:30) checklist
-- [ ] 5 models compared, Bayesian trials saved, model exported
-- [ ] Classifier-only vs HMM table
-- [ ] API + UI work for all 10 trips on two laptops, API logs visible in the terminal
-- [ ] Repo **public**, README complete, PDF report submitted
+- [ ] 5 models compared on CV, Bayesian trials saved, tuned model exported
+- [ ] Classifier-only vs HMM table (CV + one final student_test run)
+- [ ] API + UI work on two laptops for every evaluator trip, API logs visible
+- [ ] Repo public, README complete, PDF submitted

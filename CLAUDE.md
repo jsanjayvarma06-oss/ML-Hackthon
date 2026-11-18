@@ -14,8 +14,8 @@ classifier-only vs HMM comparison, Folium maps, and a PDF report.
 | Owner | Files |
 |---|---|
 | Sanjay | `pathsnap/geo.py`, `candidates.py`, `labels.py`, `features.py`, `hmm.py`, `pipeline.py`, `viz.py`, `ui/map_view.py`, `scripts/build_dataset.py`, `scripts/candidate_stats.py`, `scripts/hmm_eval.py`, `scripts/make_report_maps.py`, `report/hmm_and_data_pipeline.md` |
-| Kushal | `pathsnap/models.py`, `scripts/train_models.py`, `scripts/bayes_opt.py`, `scripts/export_model.py`, `artifacts/`, `report/models_and_tuning.md` |
-| Samarth | `scripts/eda.py`, `notebooks/`, `api/`, `ui/app.py`, `ui/requirements.txt`, `README.md`, `report/eda_maps_api_ui.md` |
+| Kushal | `pathsnap/models.py`, `scripts/train_models.py`, `scripts/bayes_opt.py`, `scripts/export_model.py`, `artifacts/`, `ui/app.py`, `ui/requirements.txt`, `report/models_and_tuning.md` |
+| Samarth (+ Jagdeesh) | `scripts/eda.py`, `notebooks/`, `api/`, `README.md`, `report/eda_maps_api_ui.md`, `report/final/` |
 | Shared (ask first) | `pathsnap/config.py`, `pathsnap/io.py`, `pathsnap/metrics.py`, `docs/CONTRACTS.md`, `requirements.txt`, `CLAUDE.md` |
 
 Each person writes outputs only into their own subfolders: Sanjay `results/pipeline/` and
@@ -38,7 +38,9 @@ If a task needs a change in someone else's file, do not edit it. Write the reque
 - Do not use `data/raw/student_test` for building, training or tuning anything: features,
   thresholds, K, label cut-offs, hyperparameters, model choice. Use train (GroupKFold) only.
 - Student-test metrics needed in the report are computed only once at the end, after every
-  choice is frozen, and never fed back into a decision. Ask the team before touching it.
+  choice is frozen, and never fed back into a decision. The team freezes at 15:30; then
+  `train_models.py --final` (Kushal) and `hmm_eval.py --final` (Sanjay) each run once.
+- Tasks and hand-off times: `WORK_SPLIT.md`.
 
 ## Hard rules (from the hackathon PDFs)
 - Evaluator trips (`data/evaluator/`, ids 15 17 23 30 49 59 67 73 87 94) are never used

@@ -55,7 +55,7 @@ Until this file exists, Sanjay tests the HMM with a distance-only emission
 
 `pathsnap.labels.make_point_labels(trip, route) -> int array` is used by the API for scoring.
 
-## 4. API (Samarth's API produces, Samarth's UI consumes)
+## 4. API (Samarth's API produces, Kushal's UI consumes)
 
 - `GET /health` -> `{"status": "ok", "eval_dir": "..."}`
 - `GET /trips` -> `{"trips": ["00000015", ...]}`
@@ -74,3 +74,24 @@ Until this file exists, Sanjay tests the HMM with a distance-only emission
 ```
 
 The reference route never appears in any response.
+
+## 5. Out-of-fold probabilities (Kushal produces, Sanjay consumes)
+
+File: `results/models/oof_probs.parquet`, made by GroupKFold on **train only** with the chosen
+model: every train row gets a probability from a model that never saw its trip.
+
+| column | type | meaning |
+|---|---|---|
+| `trip_id`, `point_idx`, `arc_id` | as in contract 1 | identify the candidate row |
+| `prob` | float | out-of-fold probability that this candidate is the true arc |
+
+Sanjay tunes the HMM on these, so no HMM setting is chosen with student_test data.
+
+## 6. Final student_test runs (after the 15:30 freeze, once)
+
+| Command | Owner | Writes |
+|---|---|---|
+| `python scripts/train_models.py --final` | Kushal | `results/models/final_student_test.csv`: Top-1, macro F1, log loss, inference time per model (5 + tuned) |
+| `python scripts/hmm_eval.py --final` | Sanjay | `results/pipeline/final_hmm_vs_classifier.csv`: per trip and overall, Top-1 and continuity with and without HMM |
+
+Without `--final` both scripts touch train only.

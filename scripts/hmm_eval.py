@@ -1,8 +1,11 @@
-"""Compare classifier-only vs classifier + HMM on student_test. OWNER: Sanjay.
+"""Compare classifier-only vs classifier + HMM. OWNER: Sanjay.
 
 Run from the repo root:  python scripts/hmm_eval.py
-Writes results/pipeline/hmm_vs_classifier.csv (per trip: top1 both ways, continuity both ways)
-and results/pipeline/maps/hmm_<trip>.html for a few trips.
+Default: train only, using Kushal's out-of-fold probabilities (docs/CONTRACTS.md #5).
+Writes results/pipeline/hmm_vs_classifier.csv (per trip: top1 both ways, continuity both
+ways) and is where HMM settings are tuned.
+`--final` (once, after the 15:30 freeze): run the exported pipeline on student_test and write
+results/pipeline/final_hmm_vs_classifier.csv. Never use these numbers to change anything.
 """
 import sys
 from pathlib import Path

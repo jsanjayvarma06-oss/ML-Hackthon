@@ -2,9 +2,11 @@
 
 Run from the repo root:  python scripts/train_models.py
 - GroupKFold on train.parquet, grouped by trip_id (never a random split)
-- Fit on all train, evaluate on student_test.parquet
-- Writes results/models/model_comparison.csv (CV macro F1, student-test top-1, macro F1,
-  log loss, train time, inference time) and comparison plots in results/models/plots/
+- Writes results/models/model_comparison.csv (CV macro F1, CV top-1, log loss, train time,
+  inference time) and comparison plots in results/models/plots/
+- Writes results/models/oof_probs.parquet for the chosen model (docs/CONTRACTS.md #5)
+- `--final` (once, after the 15:30 freeze): fit on all train, score student_test.parquet,
+  write results/models/final_student_test.csv. Never use these numbers to change anything.
 """
 import sys
 from pathlib import Path
