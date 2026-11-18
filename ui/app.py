@@ -56,8 +56,19 @@ def get_health(api_url):
     return _call("GET", api_url, "/health", timeout=10)
 
 
-def predict(api_url, trip_id):
-    return _call("POST", api_url, "/predict", timeout=300, json={"trip_id": trip_id})
+def get_models(api_url):
+    """Model names the API offers (first = default). Empty list on an older API."""
+    try:
+        return _call("GET", api_url, "/models", timeout=10).get("models", [])
+    except ApiError:
+        return []
+
+
+def predict(api_url, trip_id, model=None):
+    body = {"trip_id": trip_id}
+    if model:
+        body["model"] = model
+    return _call("POST", api_url, "/predict", timeout=300, json=body)
 
 
 def pct(x):
@@ -88,6 +99,53 @@ if checked and checked[0] == api_url:
             # Shown only if the API reports it (requested in docs/REQUESTS.md); never typed by hand.
             st.sidebar.info(f"Model on Laptop 1: {health['model']}")
 
+# ---------- Page choice ----------
+
+page = st.sidebar.radio("Page", ["Reconstruct a trip", "Model comparison"])
+
+
+def show_comparison(api_url):
+    """Model comparison page: the API's GET /comparison tables (all from results/ CSV files)."""
+    import pandas as pd
+
+    st.header("Model comparison")
+    try:
+        comp = _call("GET", api_url, "/comparison", timeout=20)
+    except ApiError as e:
+        st.error(str(e))
+        return
+    st.caption(comp.get("note", ""))
+
+    def table(key, title, best_col=None, lower_is_better=False, caption=None):
+        rows = comp.get(key)
+        if not rows:
+            return
+        df = pd.DataFrame(rows)
+        st.subheader(title)
+        if caption:
+            st.caption(caption)
+        sty = df.style.format(precision=4)
+        if best_col and best_col in df:
+            best = df[best_col].idxmin() if lower_is_better else df[best_col].idxmax()
+            sty = sty.apply(lambda r: ["background-color: rgba(46, 160, 67, 0.25)"
+                                       if r.name == best else "" for _ in r], axis=1)
+        st.dataframe(sty, use_container_width=True, hide_index=True)
+
+    table("classifiers", "Classifiers: cross-validation on the 80 train trips", "CV Top-1",
+          caption="GroupKFold(5) by trip. Highlighted = best CV Top-1. Route continuity is for "
+                  "the classifier alone (no HMM).")
+    table("tuning", "Untuned vs tuned (Bayesian optimisation)", "CV Top-1")
+    table("decoder", "Classifier only vs classifier + HMM (train, out-of-fold)", "Top-1",
+          caption="Out-of-fold probabilities: every trip scored by a model that never saw it.")
+    table("student_test", "Student-test classifiers (one final run)", "Top-1",
+          caption="10 student_test trips, scored once after every choice was frozen.")
+    table("decoder_student_test", "Student-test: classifier only vs + HMM (one final run)", "Top-1")
+
+
+if page == "Model comparison":
+    show_comparison(api_url)
+    st.stop()
+
 # ---------- Trip choice ----------
 
 try:
@@ -101,11 +159,17 @@ if not trip_ids:
     st.stop()
 
 trip_id = st.selectbox(f"Evaluation trip ({len(trip_ids)} available)", trip_ids)
+model_names = get_models(api_url)
+model = None
+if model_names:
+    model = st.selectbox("Model (first = our final model)", model_names,
+                         help="Every model runs the same pipeline: candidates, features, this "
+                              "classifier, then HMM/Viterbi.")
 
 if st.button("Reconstruct route", type="primary"):
     try:
         with st.spinner("Running the pipeline on Laptop 1..."):
-            st.session_state["result"] = predict(api_url, trip_id)
+            st.session_state["result"] = predict(api_url, trip_id, model)
     except ApiError as e:
         st.session_state.pop("result", None)
         st.error(str(e))
@@ -118,7 +182,9 @@ if result and result["trip_id"] == trip_id:
     timing = result.get("timing_ms", {})
     total = timing.get("total")
 
-    st.subheader(f"Trip {trip_id}: {result.get('n_points', 0):,} GPS points")
+    st.subheader(f"Trip {result.get('trip_id', trip_id)}: {result.get('n_points', 0):,} GPS points")
+    if result.get("model"):
+        st.caption(f"Model used: {result['model']}")
     c1, c2, c3 = st.columns(3)
     c4, c5, _ = st.columns(3)
     c1.metric("Top-1 accuracy (final)", pct(m.get("top1_accuracy")),
