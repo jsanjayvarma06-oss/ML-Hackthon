@@ -16,14 +16,15 @@ Nobody waits: each person has independent work to do first.
 2. `candidates.py`: `clean_track` (sort, dedupe, speed spikes, gap splits) and `generate_candidates` with a spatial index.
 3. `labels.py`: route → per-point labels by ordered alignment.
 4. Number for Round 1: candidate miss rate on train and student_test.
+5. Maps (done): `ui/map_view.py` (UI map: GPS blue, predicted red, start/end, no reference route) and `viz.trip_map` + `scripts/make_report_maps.py` (report maps in `results/maps/trip_*.html`). Rerun the script once the model exists to add the red predicted route.
 
 **After Round 1**
 
-5. `features.py` + `scripts/build_dataset.py`: write both parquet files. **Push as soon as it runs, and tell Kushal.**
-6. `hmm.py`: Viterbi with a distance-only emission first (works before any model exists).
-7. `pipeline.py`: `predict_trip`. Switch to the real model once `artifacts/model.joblib` is pushed.
-8. `scripts/hmm_eval.py`: classifier-only vs HMM table on student_test, plus 2–3 maps.
-9. Report: `report/hmm_and_data_pipeline.md` (preprocessing, candidates, labels and their limits, features, HMM answers 1–6).
+6. `features.py` + `scripts/build_dataset.py`: write both parquet files. **Push as soon as it runs, and tell Kushal.**
+7. `hmm.py`: Viterbi with a distance-only emission first (works before any model exists).
+8. `pipeline.py`: `predict_trip`. Switch to the real model once `artifacts/model.joblib` is pushed.
+9. `scripts/hmm_eval.py`: classifier-only vs HMM table on student_test, plus 2–3 maps.
+10. Report: `report/hmm_and_data_pipeline.md` (preprocessing, candidates, labels and their limits, features, HMM answers 1–6).
 
 ## Kushal: models + Bayesian optimisation
 
@@ -43,12 +44,14 @@ Nobody waits: each person has independent work to do first.
 
 **Before Round 1 (11:30)**
 1. `scripts/eda.py` (or `notebooks/01_eda.ipynb`): trip inventory table, missing values and gaps, sampling intervals, network size and components, coordinate plots.
-2. `viz.py`: first Folium map of a trip (GPS, nearby network, reference route), with legend and LayerControl.
+2. For EDA maps, call Sanjay's `pathsnap.viz.trip_map(trip, route=route)` and save as `results/maps/eda_<trip>.html`. Don't write new map code.
 3. Check that the API starts: `PATHSNAP_EVAL_DIR=data/raw/student_test uvicorn api.main:app --host 0.0.0.0 --port 8000`, then `/trips` from the UI on another laptop over a phone hotspot.
 
 **After Round 1**
 
-4. `ui/app.py`: trip dropdown, metrics, Folium map of GPS + predicted path (`streamlit-folium`).
+4. `ui/app.py`: trip dropdown and metrics. For the map, add after the metrics:
+   `from streamlit_folium import st_folium`, `from map_view import make_result_map`,
+   `st_folium(make_result_map(result), height=600, use_container_width=True)`.
 5. Polish `api/main.py`: logs, error messages, timing. Test all 10 student_test trips end to end.
 6. `README.md`: install, run and two-laptop deployment steps. Screenshots of the UI and API logs.
 7. Report: `report/eda_maps_api_ui.md`, then combine all three sections into the final PDF, plus an AI-use disclosure.

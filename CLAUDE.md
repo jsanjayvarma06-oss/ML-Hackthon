@@ -13,13 +13,18 @@ classifier-only vs HMM comparison, Folium maps, and a PDF report.
 ## Ownership: only edit files you own
 | Owner | Files |
 |---|---|
-| Sanjay | `pathsnap/geo.py`, `candidates.py`, `labels.py`, `features.py`, `hmm.py`, `pipeline.py`, `scripts/build_dataset.py`, `scripts/hmm_eval.py`, `report/hmm_and_data_pipeline.md` |
+| Sanjay | `pathsnap/geo.py`, `candidates.py`, `labels.py`, `features.py`, `hmm.py`, `pipeline.py`, `viz.py`, `ui/map_view.py`, `scripts/build_dataset.py`, `scripts/hmm_eval.py`, `scripts/make_report_maps.py`, `report/hmm_and_data_pipeline.md` |
 | Kushal | `pathsnap/models.py`, `scripts/train_models.py`, `scripts/bayes_opt.py`, `scripts/export_model.py`, `artifacts/`, `report/models_and_tuning.md` |
-| Samarth | `pathsnap/viz.py`, `scripts/eda.py`, `notebooks/`, `api/`, `ui/`, `README.md`, `report/eda_maps_api_ui.md` |
+| Samarth | `scripts/eda.py`, `notebooks/`, `api/`, `ui/app.py`, `ui/requirements.txt`, `README.md`, `report/eda_maps_api_ui.md` |
 | Shared (ask first) | `pathsnap/config.py`, `pathsnap/io.py`, `pathsnap/metrics.py`, `docs/CONTRACTS.md`, `requirements.txt`, `CLAUDE.md` |
 
-Each person writes outputs only into their own subfolders: Sanjay `results/pipeline/`,
-Kushal `results/models/`, Samarth `results/eda/` and `results/maps/`.
+Each person writes outputs only into their own subfolders: Sanjay `results/pipeline/` and
+`results/maps/trip_*.html`, Kushal `results/models/`, Samarth `results/eda/` and
+`results/maps/eda_*.html`.
+
+Maps: `ui/map_view.make_result_map(result)` draws the API result in the UI (GPS + predicted
+route only, never the reference route). `pathsnap.viz.trip_map(...)` draws report maps
+(GPS, nearby roads, reference route, predicted route). Use these; don't write new map code.
 If a task needs a change in someone else's file, do not edit it. Write the request in
 `docs/REQUESTS.md` and tell that person. Hand-off formats live in `docs/CONTRACTS.md`.
 
