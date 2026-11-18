@@ -9,6 +9,7 @@ output P(this candidate is the arc the car was really on).
 from lightgbm import LGBMClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
@@ -89,6 +90,22 @@ def knn_distance_weighted(n_neighbors=25):
     ])
 
 
+def naive_bayes(var_smoothing=1e-9):
+    """Gaussian Naive Bayes: a probabilistic baseline that treats features as independent.
+
+    For each class (arc / not arc) it learns a mean and variance per feature, then
+    multiplies the per-feature likelihoods ("naive" = independence assumption). Our features
+    are strongly correlated (distance to the arc vs. distance rank), so its probabilities
+    are over-confident; it is included to show what that assumption costs. Scaling does not
+    change the Gaussian fit, but var_smoothing is relative to the largest feature variance,
+    so scaling makes that stabiliser behave the same for every feature.
+    """
+    return Pipeline([
+        ("scale", StandardScaler()),
+        ("clf", GaussianNB(var_smoothing=var_smoothing)),
+    ])
+
+
 # Models that train on a fixed random subsample of GPS *points* (all candidate rows of a
 # chosen point are kept together) so the run stays affordable. Value = max training points
 # per fit. Chosen by compute budget, not by looking at results. Validation is never sampled.
@@ -103,12 +120,14 @@ def get_models():
         "lightgbm": ("Boosting", lightgbm()),
         "mlp": ("Neural network", mlp()),
         "knn_distance_weighted": ("Instance-based", knn_distance_weighted()),
+        "naive_bayes": ("Probabilistic (generative)", naive_bayes()),
     }
 
 
 FACTORIES = {
     "logistic_regression": logistic_regression, "random_forest": random_forest,
     "lightgbm": lightgbm, "mlp": mlp, "knn_distance_weighted": knn_distance_weighted,
+    "naive_bayes": naive_bayes,
 }
 
 

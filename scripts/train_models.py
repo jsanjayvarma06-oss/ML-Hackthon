@@ -39,7 +39,7 @@ THRESHOLD = 0.5  # only for F1 / confusion matrix; Top-1 and the HMM use raw pro
 OUT = RESULTS_DIR / "models"
 KEY_PARAMS = ("C", "class_weight", "n_estimators", "max_depth", "learning_rate", "num_leaves",
               "min_child_samples", "hidden_layer_sizes", "alpha", "n_neighbors", "weights",
-              "max_features", "min_samples_leaf")
+              "max_features", "min_samples_leaf", "var_smoothing")
 
 
 def labelled(df):
