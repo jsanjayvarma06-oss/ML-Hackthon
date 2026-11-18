@@ -240,7 +240,7 @@ mean train vs validation over the 5 folds (`cv_folds.csv`).
 - **A2 Strengths / limitations:** Competitive (Top-1 0.8459 in v2) and fast at prediction (0.39 ms per 1,000 rows), but not better than boosting on tabular features. Trained on a fixed 100,000-point subsample per fit for compute reasons (validation folds are never subsampled).
 - **B5 Hyperparameters:** hidden layers (64, 32), alpha (L2) 1e-4, constant learning rate, early stopping, seed 42. **B6 Objective:** log loss (cross-entropy), optimised by gradient descent.
 - **C7 to C8 Student-test:** Top-1 0.8558, Macro F1 0.9129, log loss 0.1079. Close to Random Forest.
-- **C9 Fit:** (v2) train Top-1 0.8564 vs validation 0.8459; train log loss 0.0712 vs 0.0790. Small gap, mild overfit. Loss curve: `plots/loss_curve_mlp.png` (CV fold 0). `[[TODO: the next sentences were written from the v1 plot; re-view the v2 PNG and correct them]]` Training loss drops quickly in the first 2 epochs then flattens at about 0.10 over about 27 epochs. The orange line in that plot is the MLP's validation **score** (an accuracy-type value near 0.95), not a loss, so it must not be read as a loss curve. (The lead reports the plot was redrawn from a real re-run with validation accuracy on its own right-hand axis and identical CV numbers; confirm by viewing the final PNG.)
+- **C9 Fit:** (v2) train Top-1 0.8564 vs validation 0.8459; train log loss 0.0712 vs 0.0790. Small gap, mild overfit. Loss curve (v2, CV fold 0, `plots/loss_curve_mlp.png`, as described by the lead after the redraw; `[[TODO: view the final PNG once to confirm]]`): over 32 epochs, training log loss drops from about 0.100 to about 0.075 by epoch 2, then slowly to about 0.065. The dashed line on the right-hand axis is hold-out accuracy (a score, not a loss), rising from about 0.969 to about 0.973 with some jitter. The two curves are on separate axes so they are not confused.
 
 **Model 5: KNN (distance-weighted)**
 - **A1 Why suitable?** An instance-based method with no training assumptions; included as a different family for comparison.
@@ -276,8 +276,7 @@ where "good" is most likely, so it needs far fewer trials than a grid search.
 | Tuned | 0.9111 | 0.8510 | 0.1116 | 0.8762 | 0.9282 | 0.8630 | 0.9164 | 5.33 ms CV, 5.71 ms student-test run (`cv_folds_tuned.csv`, `final_student_test.csv`) |
 
 (Table above is v1, K=8. All Optuna trials were run on the v1 data. For v2 the team reused those best
-parameters on the K=16 data (`bayes_opt.py --reuse-best`) and did not run a new 40-trial search;
-`[[TODO: confirm in scripts/bayes_opt.py and results/models/EXPERIMENTS.md]]`.) v2 untuned vs tuned,
+parameters on the K=16 data (`bayes_opt.py --reuse-best`) and did not run a new 40-trial search; confirmed by the lead thread.) v2 untuned vs tuned,
 same 5 folds, K=16 data (`tuned_vs_untuned.csv`):
 
 | v2 | CV Macro F1 | CV Top-1 | CV log loss | Train Top-1 | Route continuity (OOF) |
@@ -333,8 +332,13 @@ entries E2 to E5; v1 copies in `results/pipeline/v1_k8/`.
    **Caveat to state in the report:** the parameters were chosen on the same out-of-fold points they
    are scored on, so the train numbers are optimistic. The lead thread's held-out check (choose
    parameters on half the trips, score the other half) gives 0.948 to 0.951 Top-1, so v2 is at about
-   0.95, not clearly above it. `[[TODO: cite the file that holds this held-out check; it was given in a
-   message and is described in E5 as thread E's check, I have not seen the file]]`
+   0.95, not clearly above it. Source: `results/pipeline/hmm_heldout_split.csv` (made by
+   `scripts/hmm_heldout_split.py` from `results/pipeline/e5_log/e19_k16_per_trip.json`; full log in
+   `results/pipeline/e5_log/EXPERIMENT_LOG.md`), as reported by the lead thread: parameters chosen on
+   the even-numbered trips (beta 40, weight 0.03) score 0.9514 on those trips and 0.9480 on the held-out
+   odd trips; chosen on the odd trips (beta 10, weight 0.1) they score 0.9515 and 0.9505 held out. The
+   best overall setting (beta 10, weight 0.1) scores 0.9510. `[[TODO: open the CSV once and confirm
+   these numbers]]`
 
 **What drove the v2 changes (honest history).** After the v1 student_test run the team set a goal of at
 least 95% Top-1. That threshold is our own; it is not in the five official PDFs. v1 error analysis on
