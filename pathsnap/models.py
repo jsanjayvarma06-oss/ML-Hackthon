@@ -7,7 +7,10 @@ The task for every model: given one (GPS point, candidate arc) row of features,
 output P(this candidate is the arc the car was really on).
 """
 from lightgbm import LGBMClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -44,13 +47,75 @@ def lightgbm(n_estimators=400, learning_rate=0.05, num_leaves=31, min_child_samp
     )
 
 
-def get_models():
-    """Dict of name -> (algorithm family, untrained estimator).
+def random_forest(n_estimators=150, max_depth=14, min_samples_leaf=20, max_features="sqrt",
+                  max_samples=0.5):
+    """Random Forest: many deep-ish trees on random row/feature subsets, probabilities averaged.
 
-    Milestone 1: Logistic Regression + LightGBM. Then Random Forest, MLP and
-    distance-weighted KNN are added here.
+    The bagging (Ensemble) counterpart to LightGBM's boosting. Depth, leaf size and
+    max_samples are limited so 150 trees fit in laptop RAM and cannot memorise single
+    trips; n_jobs=-1 uses all cores.
     """
+    return RandomForestClassifier(
+        n_estimators=n_estimators, max_depth=max_depth, min_samples_leaf=min_samples_leaf,
+        max_features=max_features, max_samples=max_samples, n_jobs=-1, random_state=SEED)
+
+
+def mlp(hidden_layer_sizes=(64, 32), alpha=1e-4, learning_rate_init=1e-3):
+    """Small neural network (multi-layer perceptron) on standardised features.
+
+    Neural-network family. early_stopping holds out 10% of the training rows and stops
+    when that score stops improving, so loss_curve_ / validation_scores_ are real
+    per-epoch histories (the only NN curve we plot). Note the inner hold-out is random
+    rows, used only to choose the stopping epoch; the outer CV split is still by trip.
+    """
+    return Pipeline([
+        ("scale", StandardScaler()),
+        ("clf", MLPClassifier(hidden_layer_sizes=hidden_layer_sizes, alpha=alpha,
+                              learning_rate_init=learning_rate_init, batch_size=512,
+                              max_iter=60, early_stopping=True, validation_fraction=0.1,
+                              n_iter_no_change=5, random_state=SEED)),
+    ])
+
+
+def knn_distance_weighted(n_neighbors=25):
+    """K-nearest-neighbours in scaled feature space, closer neighbours vote more.
+
+    Instance-based family: no training, just memory, so prediction is slow. It is trained
+    on a fixed point-level subsample (see TRAIN_SUBSAMPLE) to keep fit/predict affordable.
+    """
+    return Pipeline([
+        ("scale", StandardScaler()),
+        ("clf", KNeighborsClassifier(n_neighbors=n_neighbors, weights="distance", n_jobs=-1)),
+    ])
+
+
+# Models that train on a fixed random subsample of GPS *points* (all candidate rows of a
+# chosen point are kept together) so the run stays affordable. Value = max training points
+# per fit. Chosen by compute budget, not by looking at results. Validation is never sampled.
+TRAIN_SUBSAMPLE = {"knn_distance_weighted": 40_000, "mlp": 100_000}
+
+
+def get_models():
+    """Dict of name -> (algorithm family, untrained estimator): the 5 compared models."""
     return {
         "logistic_regression": ("Linear / probabilistic", logistic_regression()),
+        "random_forest": ("Ensemble (bagging)", random_forest()),
         "lightgbm": ("Boosting", lightgbm()),
+        "mlp": ("Neural network", mlp()),
+        "knn_distance_weighted": ("Instance-based", knn_distance_weighted()),
     }
+
+
+FACTORIES = {
+    "logistic_regression": logistic_regression, "random_forest": random_forest,
+    "lightgbm": lightgbm, "mlp": mlp, "knn_distance_weighted": knn_distance_weighted,
+}
+
+
+def build(name, params=None):
+    """Untrained estimator `name` with hyperparameters `params` (dict, e.g. Optuna's best).
+
+    Used by bayes_opt.py (every trial), export_model.py and train_models.py --final so the
+    tuned model is rebuilt from the saved JSON rather than copied by hand.
+    """
+    return FACTORIES[name](**(params or {}))

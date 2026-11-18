@@ -51,7 +51,14 @@ def proba(est, X):
     return est.predict_proba(X)[:, 1]
 
 
-def key_config(est):
+def key_config(est, name=None):
+    """Short hyperparameter string for the comparison table (plus subsample note if any)."""
+    sub = models.TRAIN_SUBSAMPLE.get(name)
+    base = _key_config(est)
+    return base + (f"; trained on fixed subsample of {sub:,} GPS points per fit" if sub else "")
+
+
+def _key_config(est):
     last = est[-1] if hasattr(est, "steps") else est
     p = last.get_params()
     return "; ".join(f"{k}={p[k]}" for k in KEY_PARAMS if k in p)
@@ -97,10 +104,28 @@ def loss_history(m):
     return None
 
 
+def subsample_points(df, idx, max_points, seed=SEED):
+    """Row indices of a fixed random subsample of GPS points (all candidates of a point kept).
+
+    Used only for slow models (models.TRAIN_SUBSAMPLE). idx: row positions of the training
+    fold. Returns idx unchanged if the fold has <= max_points points.
+    """
+    sub = df.loc[idx, ["trip_id", "point_idx"]]
+    pid = pd.factorize(pd.MultiIndex.from_frame(sub))[0]
+    n_pts = pid.max() + 1
+    if n_pts <= max_points:
+        return idx
+    keep = np.random.default_rng(seed).choice(n_pts, size=max_points, replace=False)
+    return idx[np.isin(pid, keep)]
+
+
 def cross_validate(name, est, df, cols, arcs_cache):
     rows, oof = [], np.zeros(len(df))
     hist = None
+    max_pts = models.TRAIN_SUBSAMPLE.get(name)
     for fold, (tr, va) in enumerate(GroupKFold(n_splits=N_SPLITS).split(df, groups=df["trip_id"])):
+        if max_pts:  # slow model: fit and report train metrics on the fixed point subsample
+            tr = subsample_points(df, tr, max_pts)
         Xtr, ytr = df.loc[tr, cols], df.loc[tr, "label"]
         Xva, yva = df.loc[va, cols], df.loc[va, "label"]
         t0 = time.perf_counter()
@@ -217,7 +242,7 @@ def develop(names, zoo, cols):
         family, est = zoo[name]
         print(f"[{name}] GroupKFold({N_SPLITS}) on train ...", flush=True)
         cv, oof, summ, hist = cross_validate(name, est, train, cols, arcs_cache)
-        summ = {"model": name, "algorithm_family": family, "key_config": key_config(est),
+        summ = {"model": name, "algorithm_family": family, "key_config": key_config(est, name),
                 **{k: v for k, v in summ.items() if k != "model"},
                 "n_train_rows": len(train), "seed": SEED}
         print({k: (round(v, 4) if isinstance(v, float) else v) for k, v in summ.items()})
@@ -250,7 +275,11 @@ def final(names, zoo, cols, extra=None):
     rows, arcs_cache = [], {}
     for name, family, est in items:
         t0 = time.perf_counter()
-        m = fit(est, train[cols], train["label"])
+        tr_full = train
+        if name in models.TRAIN_SUBSAMPLE:
+            tr_full = train.loc[subsample_points(train, np.arange(len(train)),
+                                                 models.TRAIN_SUBSAMPLE[name])]
+        m = fit(est, tr_full[cols], tr_full["label"])
         train_s = time.perf_counter() - t0
         t0 = time.perf_counter()
         p = proba(m, test[cols])
@@ -286,7 +315,13 @@ def main(argv=None):
     names = args.models or list(zoo)
     OUT.mkdir(parents=True, exist_ok=True)
     if args.final:
-        final(names, zoo, cols)
+        extra = []
+        best = OUT / "best_params.json"  # written by bayes_opt.py; scores the tuned model too
+        if best.exists():
+            import json
+            b = json.loads(best.read_text())
+            extra.append((f"{b['model']}_tuned", zoo[b["model"]][0], models.build(b["model"], b["params"])))
+        final(names, zoo, cols, extra)
     else:
         develop(names, zoo, cols)
 
