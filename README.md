@@ -99,11 +99,9 @@ For local development you can serve training trips instead:
 | `ui/app.py` | Streamlit evaluator UI (Laptop 2) | Kushal |
 | `ui/map_view.py` | Folium map of an API result | Sanjay |
 | `artifacts/model.joblib` | exported model bundle | Kushal |
-| `docs/CONTRACTS.md`, `docs/REQUESTS.md` | hand-off formats, cross-owner requests | shared |
+| `docs/CONTRACTS.md` | hand-off formats between modules | shared |
 | `results/` | CSVs, plots, maps from real runs (per-owner subfolders) | each owner |
 | `report/` | report sections, one file per owner | each owner |
-
-Team ownership and rules: [CLAUDE.md](CLAUDE.md), [WORK_SPLIT.md](WORK_SPLIT.md).
 
 ## Where each report number comes from
 

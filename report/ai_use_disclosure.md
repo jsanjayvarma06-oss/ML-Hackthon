@@ -31,7 +31,7 @@ laptops and GitHub accounts, plus a Claude project assistant used for planning a
   ran the scripts, inspected maps, compared numbers against CSVs]]`
 - Report claims were compared with files in `results/` before submission.
   `[[CONFIRM when done]]`
-- Each team member prepared to explain their own part in `report/viva_prep.md`.
+- Each team member prepared to explain their own part of the project.
 
 ## Limits and honesty notes
 - Code written with AI help is still our responsibility; any bug is ours.
