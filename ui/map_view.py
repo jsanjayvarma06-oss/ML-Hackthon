@@ -9,12 +9,34 @@ import folium
 MAX_GPS_DOTS = 3000
 
 
+def _zoom_for(bounds, map_px=700):
+    """Web-map zoom level that fits the bounding box into about map_px pixels.
+
+    st_folium does not always apply fit_bounds (the map can open zoomed out to a whole
+    continent), so the starting zoom is computed here as well. At zoom z the world is
+    256 * 2**z pixels wide.
+    """
+    import math
+    span = max(bounds[1][1] - bounds[0][1],
+               (bounds[1][0] - bounds[0][0]) / max(math.cos(math.radians(bounds[0][0])), 0.2), 1e-4)
+    return int(max(2, min(18, math.floor(math.log2(360.0 / span * map_px / 256.0)))))
+
+
 def make_result_map(result):
+    """Folium map with the GPS points, the predicted route and start/end markers.
+
+    result: /predict JSON (coordinates already [lat, lon]). Opens centred on the trip,
+    zoomed to fit it. Never draws the reference route.
+    """
     gps, path = result["gps"], result["predicted_path"]
     if not gps:
         return folium.Map(location=[0, 0], zoom_start=2)
 
-    m = folium.Map(location=gps[0], zoom_start=15)
+    lats = [p[0] for p in gps]
+    lons = [p[1] for p in gps]
+    bounds = [[min(lats), min(lons)], [max(lats), max(lons)]]
+    center = [(bounds[0][0] + bounds[1][0]) / 2, (bounds[0][1] + bounds[1][1]) / 2]
+    m = folium.Map(location=center, zoom_start=_zoom_for(bounds))
 
     pts = folium.FeatureGroup(name="GPS points (blue)")
     step = -(-len(gps) // MAX_GPS_DOTS)  # ceil: thin out long trips so the browser keeps up
@@ -32,8 +54,6 @@ def make_result_map(result):
     folium.Marker(gps[-1], tooltip="End", icon=folium.Icon(color="black")).add_to(ends)
     ends.add_to(m)
 
-    lats = [p[0] for p in gps]
-    lons = [p[1] for p in gps]
-    m.fit_bounds([[min(lats), min(lons)], [max(lats), max(lons)]])
+    m.fit_bounds(bounds)
     folium.LayerControl(collapsed=False).add_to(m)  # layer names double as the legend
     return m

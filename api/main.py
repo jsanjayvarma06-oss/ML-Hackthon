@@ -18,34 +18,141 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from pathsnap import io, labels, metrics, pipeline
-from pathsnap.config import EVAL_DIR
+from pathsnap.config import ARTIFACTS_DIR, EVAL_DIR
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("pathsnap.api")
 
 app = FastAPI(title="PathSnap API")
 _bundle = None
+_extra = {}  # name -> bundle, for the optional models in artifacts/models/
 
 
-def get_bundle():
+MODEL_PATH = ARTIFACTS_DIR / "model.joblib"   # the final (default) model
+MODELS_DIR = ARTIFACTS_DIR / "models"          # optional: one <name>.joblib per compared model
+
+
+def get_bundle(name=None):
+    """Return a model bundle, loading it once.
+
+    name None (or the default model's name) -> artifacts/model.joblib, the chosen final model.
+    Any other name -> artifacts/models/<name>.joblib, so the evaluator can compare models live.
+    Raises 503 if the default file is missing and 404 for an unknown name.
+    """
     global _bundle
     if _bundle is None:
-        _bundle = pipeline.load_model()
+        if not MODEL_PATH.exists():
+            raise HTTPException(
+                503, f"Model file not found: {MODEL_PATH}. Run scripts/export_model.py first.")
+        _bundle = pipeline.load_model(MODEL_PATH)
         log.info("model loaded: %s", _bundle.get("name"))
-    return _bundle
+    if name is None or name == _bundle.get("name"):
+        return _bundle
+    if name not in _extra:
+        path = MODELS_DIR / f"{name}.joblib"
+        if not path.exists():
+            raise HTTPException(404, f"Unknown model {name}. See GET /models.")
+        _extra[name] = pipeline.load_model(path)
+        log.info("extra model loaded: %s", name)
+    return _extra[name]
+
+
+def available_models():
+    """Default model name first, then every artifacts/models/<name>.joblib."""
+    names = []
+    if MODEL_PATH.exists():
+        names.append(get_bundle().get("name"))
+    if MODELS_DIR.exists():
+        names += sorted(p.stem for p in MODELS_DIR.glob("*.joblib") if p.stem not in names)
+    return names
+
+
+@app.on_event("startup")
+def _startup():
+    log.info("eval_dir=%s (exists=%s) model_file=%s (exists=%s)",
+             EVAL_DIR, EVAL_DIR.exists(), MODEL_PATH, MODEL_PATH.exists())
+    # Load the model now, so the evaluator's first /predict is not slowed down by it.
+    if MODEL_PATH.exists():
+        get_bundle()
 
 
 class PredictRequest(BaseModel):
     trip_id: str
+    model: str | None = None  # optional; default = artifacts/model.joblib (the final model)
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "eval_dir": str(EVAL_DIR)}
+    """Cheap liveness check. Reports the model name only if the model file exists."""
+    name = None
+    if _bundle is not None:
+        name = _bundle.get("name")
+    elif MODEL_PATH.exists():
+        try:
+            name = pipeline.load_model(MODEL_PATH).get("name")
+        except Exception as e:  # corrupt file: say so instead of crashing /health
+            log.warning("could not read model file: %s", e)
+    return {"status": "ok", "eval_dir": str(EVAL_DIR), "model": name,
+            "model_file_found": MODEL_PATH.exists()}
+
+
+@app.get("/models")
+def models():
+    """Models the UI can choose from. The first one is the default (final) model."""
+    names = available_models()
+    return {"models": names, "default": names[0] if names else None}
+
+
+def _csv_rows(path, columns):
+    """Rows of a results CSV as a list of dicts, keeping and renaming `columns` (old -> new).
+    Returns None when the file does not exist yet."""
+    import pandas as pd
+    if not path.exists():
+        return None
+    df = pd.read_csv(path)
+    keep = [c for c in columns if c in df.columns]
+    df = df[keep].rename(columns=columns)
+    return df.where(df.notna(), None).to_dict(orient="records")
+
+
+@app.get("/comparison")
+def comparison():
+    """Model comparison tables for the UI, read straight from the results/ CSV files.
+
+    Nothing here is computed or typed by hand: each table is a file written by a script
+    (train_models.py, bayes_opt.py, hmm_eval.py). Missing files are simply left out.
+    """
+    res = ARTIFACTS_DIR.parent / "results"
+    out = {
+        "note": "Numbers come from results/models/*.csv and results/pipeline/hmm_comparison.csv.",
+        "classifiers": _csv_rows(res / "models" / "model_comparison.csv", {
+            "model": "Model", "algorithm_family": "Family", "cv_top1_mean": "CV Top-1",
+            "cv_top1_std": "Top-1 std", "cv_f1_macro_mean": "CV macro F1",
+            "cv_log_loss_mean": "CV log loss", "cv_train_top1_mean": "Train Top-1",
+            "oof_route_continuity": "Route continuity", "fit_seconds_mean": "Train s / fold",
+            "infer_ms_per_1000_rows": "Inference ms / 1k rows"}),
+        "tuning": _csv_rows(res / "models" / "tuned_vs_untuned.csv", {
+            "variant": "Variant", "model": "Model", "cv_top1_mean": "CV Top-1", "cv_f1_macro_mean": "CV macro F1",
+            "cv_log_loss_mean": "CV log loss", "fit_seconds_mean": "Train s / fold",
+            "infer_ms_per_1000_rows": "Inference ms / 1k rows"}),
+        "decoder": _csv_rows(res / "pipeline" / "hmm_comparison.csv", {
+            "method": "Method", "top1_pooled": "Top-1", "top1_mean_over_trips": "Top-1 (trip mean)",
+            "route_continuity": "Route continuity", "n_trips": "Trips"}),
+        "decoder_student_test": _csv_rows(res / "pipeline" / "hmm_comparison_student_test.csv", {
+            "method": "Method", "top1_pooled": "Top-1", "route_continuity": "Route continuity",
+            "model": "Classifier"}),
+        "student_test": _csv_rows(res / "models" / "final_student_test.csv", {
+            "model": "Model", "test_top1": "Top-1", "test_f1_macro": "Macro F1",
+            "test_log_loss": "Log loss", "test_route_continuity": "Route continuity",
+            "infer_ms_per_1000_rows": "Inference ms / 1k rows"}),
+    }
+    log.info("GET /comparison")
+    return out
 
 
 @app.get("/trips")
 def trips():
+    """List the trip ids available in PATHSNAP_EVAL_DIR."""
     if not EVAL_DIR.exists():
         raise HTTPException(500, f"Trip folder not found: {EVAL_DIR}. Set PATHSNAP_EVAL_DIR.")
     ids = io.list_trips(EVAL_DIR)
@@ -55,13 +162,17 @@ def trips():
 
 @app.post("/predict")
 def predict(req: PredictRequest):
-    log.info("POST /predict trip_id=%s", req.trip_id)
+    """Run the full pipeline on one trip and return GPS, predicted path, metrics and timing."""
+    log.info("POST /predict trip_id=%s model=%s", req.trip_id, req.model or "default")
+    if not EVAL_DIR.exists():
+        raise HTTPException(500, f"Trip folder not found: {EVAL_DIR}. Set PATHSNAP_EVAL_DIR.")
+    bundle = get_bundle(req.model)
     if req.trip_id not in io.list_trips(EVAL_DIR):
         raise HTTPException(404, f"Unknown trip {req.trip_id}")
     t0 = time.perf_counter()
     trip = io.load_trip(EVAL_DIR, req.trip_id)
     try:
-        out = pipeline.predict_trip(trip, get_bundle())
+        out = pipeline.predict_trip(trip, bundle)
     except NotImplementedError as e:
         raise HTTPException(501, f"Pipeline not finished yet: {e}")
 
@@ -70,6 +181,7 @@ def predict(req: PredictRequest):
     true_arc = labels.make_point_labels(trip, route)
     result = {
         "trip_id": req.trip_id,
+        "model": bundle.get("name"),
         "n_points": int(len(trip.track)),
         "gps": [[float(lat), float(lon)] for lon, lat, _ in trip.track],
         "predicted_path": _arc_segments(trip, out["pred_arc"]),
@@ -81,7 +193,7 @@ def predict(req: PredictRequest):
         },
         "timing_ms": {**out.get("timing_ms", {}), "total": (time.perf_counter() - t0) * 1000},
     }
-    log.info("trip %s top1=%.3f continuity=%.3f total_ms=%.0f", req.trip_id,
+    log.info("trip %s model=%s top1=%.3f continuity=%.3f total_ms=%.0f", req.trip_id, result["model"],
              result["metrics"]["top1_accuracy"], result["metrics"]["route_continuity"],
              result["timing_ms"]["total"])
     return result

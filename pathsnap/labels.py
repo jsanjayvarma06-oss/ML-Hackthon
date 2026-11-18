@@ -16,7 +16,7 @@ from pathsnap.candidates import canonical_arc_ids, clean_track
 from pathsnap.geo import point_to_segment, project_trip
 from pathsnap.metrics import UNLABELLED
 
-# Aligned points sit a median ~4.7 m and p95 ~15 m from their route arc
+# On train, aligned points sit a median ~4.6 m and p95 ~14 m from their route arc
 # (results/pipeline/trip_stats.csv), so 50 m keeps real GPS noise and drops points
 # the route does not cover (trip 54: route covers only the first ~11% of the track).
 MAX_LABEL_DIST_M = 50.0

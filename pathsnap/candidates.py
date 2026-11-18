@@ -12,10 +12,12 @@ from scipy.spatial import cKDTree
 
 from pathsnap.geo import point_to_segment, project_trip, to_local_xy
 
-# From results/pipeline/candidate_miss_rate.csv: K=8 misses 0.9% of train points and
-# 0.25% of student_test points; K=16 only saves another 0.4% but doubles the rows.
+# Chosen on train only (results/pipeline/candidate_miss_rate.csv): K=8 misses 0.9% of
+# labelled train points; K=16 saves another 0.4% but doubles the rows.
 # K=1 misses ~45% because two-way roads give two arcs at the same distance.
-K_CANDIDATES = 8
+# v1 used K=8 (results in results/*/v1_k8/). v2 uses K=16: on train, distance + HMM went
+# from 0.9289 to 0.9332 Top-1 (results/pipeline/EXPERIMENTS.md, E5).
+K_CANDIDATES = 16
 RADIUS_M = 75.0           # above the 50 m label cut-off, so a labelled arc is never cut by radius
 MAX_SPEED_MPS = 70.0      # 252 km/h: anything faster between two fixes is a GPS spike
 MAX_SPIKE_RUN = 5         # after this many drops in a row, trust the track again
@@ -114,7 +116,9 @@ def generate_candidates(trip, k=K_CANDIDATES, radius_m=RADIUS_M, keep_idx=None, 
     # Sample points every SAMPLE_STEP_M along each arc (both ends included).
     n_samp = np.ceil(txy.arc_len[arc_ids] / SAMPLE_STEP_M).astype(int) + 1
     owner = np.repeat(np.arange(len(arc_ids)), n_samp)
-    frac = np.concatenate([np.linspace(0, 1, m) for m in n_samp])
+    # position of each sample along its arc, 0..1 (vectorised np.linspace(0, 1, m) per arc)
+    start = np.repeat(np.cumsum(n_samp) - n_samp, n_samp)
+    frac = (np.arange(n_samp.sum()) - start) / np.maximum(n_samp[owner] - 1, 1)
     sx = s[owner, 0] + frac * (s[owner, 2] - s[owner, 0])
     sy = s[owner, 1] + frac * (s[owner, 3] - s[owner, 1])
     tree = cKDTree(np.column_stack([sx, sy]))
