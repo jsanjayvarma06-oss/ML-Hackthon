@@ -33,3 +33,13 @@ Each entry: command, code commit, date, outputs, headline numbers. Numbers are c
 - `predict_trip` with distance-only emission and with a LightGBM bundle fitted on all train
   (temporary, in-sample, only to check that nothing crashes) ran on all 80 train trips without error.
   Slowest trips ~2.2 s end to end. No accuracy was recorded from this run.
+
+## E3: HMM parameter search on the tuned LightGBM OOF probabilities
+- Command: `python scripts/hmm_eval.py --oof results/models/oof_lightgbm_tuned.parquet` (2 min 21 s)
+- OOF file: tuned LightGBM (best_params.json), GroupKFold(5) by trip, from `scripts/bayes_opt.py` (models thread)
+- Data: 80 train trips, 185,107 labelled points. student_test not used.
+- Outputs: `hmm_grid.csv`, `hmm_comparison.csv`, `hmm_per_trip_*.csv`, `hmm_params.json` (overwrote E2's)
+- Headline (pooled Top-1 / route continuity): classifier-only 0.8508 / 0.9441; classifier + HMM 0.9388 / 0.9809;
+  distance + HMM unchanged 0.9289 / 0.9813. Chosen params unchanged: beta 10, floor 25, emission weight 0.1.
+- Reading: tuning the classifier changed classifier-only Top-1 by +0.0006 and classifier+HMM by −0.0002 (0.9390 in E2), i.e. no measurable difference.
+- Then `python scripts/export_model.py` wrote `artifacts/model.joblib` = lightgbm_tuned with these hmm_params.

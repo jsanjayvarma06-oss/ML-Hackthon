@@ -3,7 +3,7 @@
     "beta": 10.0,
     "floor": 25.0,
     "emission_weight": 0.1,
-    "train_top1": 0.9390082492828472
+    "train_top1": 0.9387759512065994
   },
   "distance_hmm": {
     "beta": 50.0,
