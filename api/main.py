@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from pathsnap import io, labels, metrics, pipeline
-from pathsnap.config import EVAL_DIR
+from pathsnap.config import ARTIFACTS_DIR, EVAL_DIR
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("pathsnap.api")
@@ -27,12 +27,25 @@ app = FastAPI(title="PathSnap API")
 _bundle = None
 
 
+MODEL_PATH = ARTIFACTS_DIR / "model.joblib"
+
+
 def get_bundle():
+    """Load artifacts/model.joblib once. Raises a clear 503 if it has not been exported."""
     global _bundle
     if _bundle is None:
-        _bundle = pipeline.load_model()
+        if not MODEL_PATH.exists():
+            raise HTTPException(
+                503, f"Model file not found: {MODEL_PATH}. Run scripts/export_model.py first.")
+        _bundle = pipeline.load_model(MODEL_PATH)
         log.info("model loaded: %s", _bundle.get("name"))
     return _bundle
+
+
+@app.on_event("startup")
+def _startup():
+    log.info("eval_dir=%s (exists=%s) model_file=%s (exists=%s)",
+             EVAL_DIR, EVAL_DIR.exists(), MODEL_PATH, MODEL_PATH.exists())
 
 
 class PredictRequest(BaseModel):
@@ -41,11 +54,22 @@ class PredictRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "eval_dir": str(EVAL_DIR)}
+    """Cheap liveness check. Reports the model name only if the model file exists."""
+    name = None
+    if _bundle is not None:
+        name = _bundle.get("name")
+    elif MODEL_PATH.exists():
+        try:
+            name = pipeline.load_model(MODEL_PATH).get("name")
+        except Exception as e:  # corrupt file: say so instead of crashing /health
+            log.warning("could not read model file: %s", e)
+    return {"status": "ok", "eval_dir": str(EVAL_DIR), "model": name,
+            "model_file_found": MODEL_PATH.exists()}
 
 
 @app.get("/trips")
 def trips():
+    """List the trip ids available in PATHSNAP_EVAL_DIR."""
     if not EVAL_DIR.exists():
         raise HTTPException(500, f"Trip folder not found: {EVAL_DIR}. Set PATHSNAP_EVAL_DIR.")
     ids = io.list_trips(EVAL_DIR)
@@ -55,13 +79,17 @@ def trips():
 
 @app.post("/predict")
 def predict(req: PredictRequest):
+    """Run the full pipeline on one trip and return GPS, predicted path, metrics and timing."""
     log.info("POST /predict trip_id=%s", req.trip_id)
+    if not EVAL_DIR.exists():
+        raise HTTPException(500, f"Trip folder not found: {EVAL_DIR}. Set PATHSNAP_EVAL_DIR.")
+    bundle = get_bundle()
     if req.trip_id not in io.list_trips(EVAL_DIR):
         raise HTTPException(404, f"Unknown trip {req.trip_id}")
     t0 = time.perf_counter()
     trip = io.load_trip(EVAL_DIR, req.trip_id)
     try:
-        out = pipeline.predict_trip(trip, get_bundle())
+        out = pipeline.predict_trip(trip, bundle)
     except NotImplementedError as e:
         raise HTTPException(501, f"Pipeline not finished yet: {e}")
 
