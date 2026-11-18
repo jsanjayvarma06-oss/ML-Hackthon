@@ -249,35 +249,66 @@ Be honest if the gain is small or within noise.
 ---
 
 ## 5. HMM and Viterbi route reconstruction
-Plain-language idea: the classifier judges each GPS point alone and can jump between roads.
-A real vehicle cannot teleport, so we look for the single best *whole* chain of arcs. Viterbi is
-the dynamic-programming method that finds that chain efficiently instead of trying every
-combination.
+Plain-language idea: the classifier judges each GPS point alone and can jump between roads, or
+pick the wrong direction of a two-way road. A real vehicle cannot teleport, so we look for the
+single best *whole* chain of arcs. Viterbi is the dynamic-programming method that finds that
+chain efficiently instead of trying every combination. Code: `pathsnap/hmm.py`,
+`pathsnap/pipeline.py`, `scripts/hmm_eval.py`. Details also in `report/hmm_and_data_pipeline.md`.
+All numbers: `results/pipeline/hmm_comparison.csv`, `hmm_params.json`, `hmm_grid.csv`,
+`hmm_per_trip_*.csv`.
 
-(The design below is from the team's agreed plan in `pathsnap/hmm.py` and `docs/CONTRACTS.md`.
-At the time of writing the decoder was not yet implemented, so confirm each statement against
-the final `hmm.py` before submitting and fix any difference.)
+1. **Hidden states:** for each GPS point, one of its (up to 8) candidate arcs.
+2. **Emission:** log of the classifier probability that the candidate is correct, multiplied by an
+   emission weight. The no-ML baseline uses a Gaussian on the point-to-arc distance (sigma 10 m).
+   Probabilities are clipped to at least 1e-6 so the log is finite.
+3. **Transition:** from candidate a at one point to candidate b at the next, score
+   exp(-|road distance - GPS distance| / beta). Road distance is the shortest path on the arc
+   graph (bounded Dijkstra search) between the projections of the two points. A car moves about as
+   far on the road as the GPS says it moved, so large disagreement is penalised.
+4. **Gaps and missing candidates:** the trip is cut wherever the time gap is over 60 s and each
+   piece is decoded separately (no linking across a gap). Points with no candidate get no arc
+   (-1). Network search is bounded, so far-apart points do not trigger a huge search.
+5. **Disconnected consecutive observations:** if b cannot be reached from a, the transition gets a
+   fixed penalty (the "floor", in log units), never zero probability, so one bad point cannot kill
+   the whole path. Viterbi runs in log space to avoid underflow.
+6. **Tuned values** (4 parameters, chosen on train out-of-fold probabilities, GroupKFold by trip;
+   120 grid trials per method in `hmm_grid.csv`): classifier+HMM uses beta 10, floor 25, emission
+   weight 0.1; distance+HMM uses beta 50, floor 50, emission weight 0.25 (`hmm_params.json`).
+   Caveat: these were tuned and scored on the same 80 train trips, so the HMM numbers are slightly
+   optimistic. The top few grid settings are within about 0.001 Top-1 of each other, so the result
+   is not sensitive to the exact values. The honest check is the one-time student_test run.
 
-1. **Hidden states:** for each GPS point, one of its candidate arcs.
-2. **Emission:** the classifier's probability for that candidate (log). Baseline without ML:
-   Gaussian on `dist_m`.
-3. **Transition:** high if the next arc is the same or directly connected (`arcs[a,1] == arcs[b,0]`);
-   otherwise scored from the difference between road distance and straight GPS distance, with a
-   small floor so no path is ever impossible. Parameters `[[TODO <- results/pipeline/hmm_params.json]]`.
-4. **Gaps / missing candidates:** the trip is split at time gaps over 60 s (segments from
-   `clean_track`) and each part is decoded separately. Points without candidates get no arc.
-   `[[TODO: confirm]]`
-5. **Disconnected consecutive observations:** `[[TODO: describe floor behaviour as implemented]]`
-6. **Did HMM help?** Comparison, train (out-of-fold probabilities) and student_test once:
+**Did HMM decoding improve the final route?** Train, 80 trips, 185,107 labelled points, out-of-fold
+LightGBM probabilities (pooled over points; `hmm_comparison.csv`):
 
-| Method | Top-1 | Route continuity |
-|---|---|---|
-| Nearest arc only / distance-only HMM | `[[TODO]]` | `[[TODO]]` |
-| Classifier only | `[[TODO]]` | `[[TODO]]` |
-| Classifier + HMM/Viterbi | `[[TODO]]` | `[[TODO]]` |
+| Method | Top-1 | Route continuity | Student-test Top-1 | Student-test continuity |
+|---|---|---|---|---|
+| Nearest arc (distance only) | 0.5536 | 0.8243 | `[[TODO --final]]` | `[[TODO --final]]` |
+| Distance emission + HMM (no ML) | 0.9289 | 0.9813 | `[[TODO --final]]` | `[[TODO --final]]` |
+| Classifier only (LightGBM) | 0.8502 | 0.9442 | `[[TODO --final]]` | `[[TODO --final]]` |
+| Classifier + HMM | 0.9390 | 0.9809 | `[[TODO --final]]` | `[[TODO --final]]` |
 
-Source: `results/pipeline/hmm_comparison.csv`. Discuss trips where HMM helped and where it did
-not (`[[TODO: per-trip examples from the same file and a Folium map]]`).
+What this shows, stated honestly:
+- **Most of the gain comes from the HMM, not the classifier.** The HMM lifts the classifier from
+  0.850 to 0.939 Top-1 (+8.9 points) and route continuity from 0.944 to 0.981. A distance-only HMM
+  with no machine learning at all already reaches 0.929 Top-1 and 0.981 continuity.
+- **The classifier adds about 1 point on top of the HMM** (0.939 vs 0.929 Top-1), and no gain in
+  continuity (0.9809 vs 0.9813). The tuned emission weight is small (0.1), meaning the HMM gives
+  the classifier's opinion little weight relative to the road-connection model. We should not
+  overstate the classifier's role: the work that matters most here is candidate generation,
+  heading features (which help the classifier itself) and the transition model.
+- **Per trip (80 trips):** classifier+HMM beats classifier-only on 79 trips and is worse on one.
+  Biggest gains: trip 2 (0.584 to 0.891), trip 8 (0.603 to 0.863), trip 33 (0.476 to 0.724),
+  trip 21 (0.776 to 0.994). Median gain per trip is about 4.7 points. Classifier+HMM beats
+  distance+HMM on 61 trips and is worse on 17.
+- **Where HMM did not help:** trip 63 got worse with the HMM (0.846 to 0.829), and on 17 trips the
+  distance-only HMM was better than classifier+HMM, so the classifier's probabilities sometimes
+  pull the path the wrong way. `[[TODO: look at trip 63 (and trip 33, still only 0.724) on a Folium
+  map and state the cause only after seeing it. Do not guess.]]`
+- Unlabelled points (about 11% of kept points, section 2.2.2) are not scored.
+
+Folium map showing classifier-only vs classifier+HMM on one trip: `[[TODO: results/maps/trip_<id>.html
+and screenshot]]`.
 
 ---
 
